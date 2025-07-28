@@ -29,8 +29,8 @@ async function startBot() {
 
   const bot = makeWASocket({
     logger: Pino({ level: "silent" }),
-    printQRInTerminal: false, // Kita akan menangani QR secara manual
-    browser: ['My-WhatsApp-Bot', 'Chrome', '1.0.0'],
+    printQRInTerminal: true, // Kita akan menangani QR secara manual
+    browser: ['Chrome', '1.0.0'],
     auth: {
       creds: state.creds,
       // Menyimpan kunci sinyal di memori cache untuk kecepatan
