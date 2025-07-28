@@ -3,10 +3,8 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   makeInMemoryStore,
-  proto
 } = require('lily-baileys');
 
 const Pino = require('pino');
@@ -14,35 +12,60 @@ const { Low, JSONFile } = require("./lib/lowdb");
 const fs = require("fs");
 const path = require("path");
 const chokidar = require("chokidar");
-const qrcode = require('qrcode-terminal');
 const Collection = require("./lib/CommandCollections");
+const readline = require("readline"); // Modul untuk membaca input terminal
 
 // --- Inisialisasi Store ---
 const store = makeInMemoryStore({ logger: Pino().child({ level: 'silent', stream: 'store' }) });
+
+// Fungsi untuk meminta input nomor telepon di terminal
+const question = (text) => {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  return new Promise((resolve) => {
+    rl.question(text, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+};
 
 // Fungsi utama untuk menjalankan bot
 async function startBot() {
   console.log('[LOG] Memulai bot...');
 
-  // --- Manajemen Sesi (Auth State) untuk lily-baileys ---
   const { state, saveCreds } = await useMultiFileAuthState("sessions");
 
   const bot = makeWASocket({
     logger: Pino({ level: "silent" }),
-    printQRInTerminal: false, // Kita akan menangani QR secara manual
+    printQRInTerminal: false,
     browser: ['My-WhatsApp-Bot', 'Chrome', '1.0.0'],
     auth: {
       creds: state.creds,
-      // Menyimpan kunci sinyal di memori cache untuk kecepatan
-      keys: makeCacheableSignalKeyStore(state.keys, Pino({ level: "silent" }).child({ level: 'silent' })),
+      keys: makeCacheableSignalKeyStore(state.keys, Pino({ level: 'silent' }).child({ level: 'silent' })),
     },
-    // Memberi tahu bot cara mengambil pesan yang tersimpan
     getMessage: async (key) => store.loadMessage(key.remoteJid, key.id)
   });
 
-  // Mengikat store ke event bot
   store.bind(bot.ev);
   bot.store = store;
+
+  // Cek apakah bot belum pernah terhubung/registrasi
+  if (!bot.authState.creds.registered) {
+    // Minta nomor telepon jika belum ada
+    let phoneNumber = process.env.BOT_NUMBER; // Coba ambil dari .env dulu
+    if (!phoneNumber) {
+      phoneNumber = await question("Masukkan nomor WhatsApp Anda (format 62xxxxxxxx): ");
+    }
+    phoneNumber = phoneNumber.replace(/[^0-9]/g, ''); // Bersihkan nomor
+
+    // Meminta kode pairing
+    const code = await bot.requestPairingCode(phoneNumber);
+    console.log(`✅ Kode Pairing Anda: ${code}`);
+    console.log("Buka WhatsApp > Perangkat Tertaut > Tautkan perangkat > Tautkan dengan nomor telepon.");
+  }
 
   // Memuat Database
   const dbPath = path.join(__dirname, 'database.json');
@@ -59,27 +82,14 @@ async function startBot() {
   chokidar.watch(path.join(__dirname, "commands"), { persistent: true, ignoreInitial: true })
     .on("all", () => loadCommands("commands", bot));
 
-  // --- Event Handler ---
   bot.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      console.log('------------------------------------------------');
-      console.log('📱 Pindai QR Code di bawah ini:');
-
-      qrcode.generate(qr, { small: true });
-
-      // Kita tetap sediakan link sebagai cadangan
-      const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qr)}`;
-      console.log(`\n Atau, jika QR di atas tidak jelas, buka link ini di browser:\n${qrLink}`);
-      console.log('------------------------------------------------');
-    }
+    const { connection, lastDisconnect } = update;
 
     if (connection === "close") {
       const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
       console.log(`[CONNECTION] Terputus karena: ${lastDisconnect.error}, menyambung ulang: ${shouldReconnect}`);
       if (shouldReconnect) {
-        startBot(); // Sesuaikan dengan nama fungsi utama Anda, mungkin 'start()'
+        startBot();
       } else {
         console.log('[CONNECTION] Terputus permanen. Hapus folder "sessions" dan mulai ulang.');
       }
@@ -88,7 +98,6 @@ async function startBot() {
     }
   });
 
-  // Menangani Event Lainnya
   bot.ev.on("creds.update", saveCreds);
   bot.ev.on("messages.upsert", require("./events/CommandHandler").chatUpdate.bind(bot));
   bot.ev.on("group-participants.update", async (update) => {
@@ -131,7 +140,6 @@ async function startBot() {
   });
 }
 
-// Fungsi untuk memuat file perintah
 function loadCommands(dir, bot) {
   bot.commands.clear();
   const commandsPath = path.join(__dirname, dir);
@@ -157,9 +165,5 @@ function loadCommands(dir, bot) {
   console.log(`[COMMANDS] Berhasil dimuat: ${bot.commands.size} perintah.`);
 }
 
-// Menjalankan bot
 startBot().catch(console.error);
-
-// Menangani error yang tidak tertangkap
 process.on("uncaughtException", console.error);
-
