@@ -36,7 +36,7 @@ async function startBot() {
 
   const bot = makeWASocket({
     logger: Pino({ level: "silent" }),
-    printQRInTerminal: false,
+    printQRInTerminal: false, // Penting: Matikan QR code bawaan
     browser: ['My-WhatsApp-Bot', 'Chrome', '1.0.0'],
     auth: {
       creds: state.creds,
@@ -48,6 +48,8 @@ async function startBot() {
   store.bind(bot.ev);
   bot.store = store;
 
+  // --- PERBAIKAN UTAMA: LOGIKA PAIRING CODE YANG BENAR ---
+  // Cek apakah bot belum pernah terhubung/registrasi
   if (!bot.authState.creds.registered) {
     let phoneNumber = process.env.BOT_NUMBER;
     if (!phoneNumber) {
@@ -55,15 +57,12 @@ async function startBot() {
     }
     phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
 
-    // Meminta kode pairing
+    // Meminta kode pairing. Kode akan diterima di event 'connection.update'
     setTimeout(async () => {
-      let code = await bot.requestPairingCode(phoneNumber);
-      // Membersihkan dan memformat kode
-      code = code?.match(/.{1,4}/g)?.join("-") || code;
-      console.log(`✅ Kode Pairing Anda: ${code}`);
-      console.log("Buka WhatsApp > Perangkat Tertaut > Tautkan perangkat > Tautkan dengan nomor telepon.");
-    }, 3000); // Memberi jeda 3 detik 
+      await bot.requestPairingCode(phoneNumber);
+    }, 3000); // Jeda untuk memastikan socket siap
   }
+  // --- AKHIR PERBAIKAN ---
 
   const dbPath = path.join(__dirname, 'database.json');
   bot.db = new Low(new JSONFile(dbPath));
@@ -77,7 +76,17 @@ async function startBot() {
     .on("all", () => loadCommands("commands", bot));
 
   bot.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect } = update;
+    const { connection, lastDisconnect, qr } = update;
+
+    // --- PERBAIKAN UTAMA: Menangkap Pairing Code dari event ---
+    // Properti 'qr' sekarang berisi pairing code, bukan data gambar
+    if (qr) {
+      const code = qr.match(/.{1,4}/g)?.join("-") || qr;
+      console.log(`✅ Kode Pairing Anda: ${code}`);
+      console.log("Buka WhatsApp > Perangkat Tertaut > Tautkan perangkat > Tautkan dengan nomor telepon.");
+    }
+    // --- AKHIR PERBAIKAN ---
+
     if (connection === "close") {
       const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
       console.log(`[CONNECTION] Terputus karena: ${lastDisconnect.error}, menyambung ulang: ${shouldReconnect}`);
@@ -160,4 +169,3 @@ function loadCommands(dir, bot) {
 
 startBot().catch(console.error);
 process.on("uncaughtException", console.error);
-
