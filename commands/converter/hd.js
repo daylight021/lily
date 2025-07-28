@@ -1,6 +1,6 @@
 const axios = require('axios');
 const FormData = require('form-data');
-const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { downloadMediaMessage } = require('lily-baileys');
 
 // Fungsi untuk memanggil API Vyro.ai dengan konfigurasi yang lebih robust
 async function reminiVyro(imageBuffer, method = 'enhance') {
