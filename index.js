@@ -35,21 +35,29 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("sessions");
 
   const bot = makeWASocket({
-    logger: Pino({ level: "silent" }),
-    printQRInTerminal: false, // Penting: Matikan QR code bawaan
+    // Konfigurasi ini membuat log error lebih rapi dan berwarna
+    logger: pino({
+      level: 'silent',
+      transport: {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          ignore: 'pid,hostname'
+        }
+      }
+    }),
+
     browser: ['Chrome (Linux)', '', ''],
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, Pino({ level: 'silent' }).child({ level: 'silent' })),
-    },
-    getMessage: async (key) => store.loadMessage(key.remoteJid, key.id)
+
+    auth: state,
+    printQRInTerminal: false,
   });
 
   store.bind(bot.ev);
   bot.store = store;
 
   // Cek apakah bot belum pernah terhubung/registrasi
-if (!bot.authState.creds.registered) {
+  if (!bot.authState.creds.registered) {
     const phoneNumber = await question('Masukan Nomor Whatsapp Anda: ');
     const code = await bot.requestPairingCode(phoneNumber);
 
