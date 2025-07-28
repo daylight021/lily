@@ -13,12 +13,10 @@ const fs = require("fs");
 const path = require("path");
 const chokidar = require("chokidar");
 const Collection = require("./lib/CommandCollections");
-const readline = require("readline"); // Modul untuk membaca input terminal
+const readline = require("readline");
 
-// --- Inisialisasi Store ---
 const store = makeInMemoryStore({ logger: Pino().child({ level: 'silent', stream: 'store' }) });
 
-// Fungsi untuk meminta input nomor telepon di terminal
 const question = (text) => {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -32,10 +30,8 @@ const question = (text) => {
   });
 };
 
-// Fungsi utama untuk menjalankan bot
 async function startBot() {
   console.log('[LOG] Memulai bot...');
-
   const { state, saveCreds } = await useMultiFileAuthState("sessions");
 
   const bot = makeWASocket({
@@ -52,31 +48,29 @@ async function startBot() {
   store.bind(bot.ev);
   bot.store = store;
 
-  // Cek apakah bot belum pernah terhubung/registrasi
   if (!bot.authState.creds.registered) {
-    // Minta nomor telepon jika belum ada
-    let phoneNumber = process.env.BOT_NUMBER; // Coba ambil dari .env dulu
+    let phoneNumber = process.env.BOT_NUMBER;
     if (!phoneNumber) {
       phoneNumber = await question("Masukkan nomor WhatsApp Anda (format 62xxxxxxxx): ");
     }
-    phoneNumber = phoneNumber.replace(/[^0-9]/g, ''); // Bersihkan nomor
+    phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
 
     // Meminta kode pairing
-    const code = await bot.requestPairingCode(phoneNumber);
-    console.log(`✅ Kode Pairing Anda: ${code}`);
-    console.log("Buka WhatsApp > Perangkat Tertaut > Tautkan perangkat > Tautkan dengan nomor telepon.");
+    setTimeout(async () => {
+      let code = await bot.requestPairingCode(phoneNumber);
+      // Membersihkan dan memformat kode
+      code = code?.match(/.{1,4}/g)?.join("-") || code;
+      console.log(`✅ Kode Pairing Anda: ${code}`);
+      console.log("Buka WhatsApp > Perangkat Tertaut > Tautkan perangkat > Tautkan dengan nomor telepon.");
+    }, 3000); // Memberi jeda 3 detik 
   }
 
-  // Memuat Database
   const dbPath = path.join(__dirname, 'database.json');
   bot.db = new Low(new JSONFile(dbPath));
   await bot.db.read();
   bot.db.data = bot.db.data || { users: {}, groups: {} };
-  setInterval(() => {
-    bot.db.write().catch(console.error);
-  }, 30 * 1000);
+  setInterval(() => { bot.db.write().catch(console.error); }, 30 * 1000);
 
-  // Memuat Perintah
   bot.commands = new Collection();
   loadCommands("commands", bot);
   chokidar.watch(path.join(__dirname, "commands"), { persistent: true, ignoreInitial: true })
@@ -84,7 +78,6 @@ async function startBot() {
 
   bot.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
-
     if (connection === "close") {
       const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
       console.log(`[CONNECTION] Terputus karena: ${lastDisconnect.error}, menyambung ulang: ${shouldReconnect}`);
@@ -167,3 +160,4 @@ function loadCommands(dir, bot) {
 
 startBot().catch(console.error);
 process.on("uncaughtException", console.error);
+
