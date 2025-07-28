@@ -66,14 +66,20 @@ async function startBot() {
     if (qr) {
       console.log('------------------------------------------------');
       console.log('📱 Pindai QR Code di bawah ini:');
+
       qrcode.generate(qr, { small: true });
+
+      // Kita tetap sediakan link sebagai cadangan
+      const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qr)}`;
+      console.log(`\n Atau, jika QR di atas tidak jelas, buka link ini di browser:\n${qrLink}`);
+      console.log('------------------------------------------------');
     }
 
     if (connection === "close") {
       const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
       console.log(`[CONNECTION] Terputus karena: ${lastDisconnect.error}, menyambung ulang: ${shouldReconnect}`);
       if (shouldReconnect) {
-        startBot();
+        startBot(); // Sesuaikan dengan nama fungsi utama Anda, mungkin 'start()'
       } else {
         console.log('[CONNECTION] Terputus permanen. Hapus folder "sessions" dan mulai ulang.');
       }
