@@ -2,103 +2,84 @@ const yts = require('yt-search');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
 
-const TEMP_DIR = path.join(__dirname, '../../temp');
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
-
-// Fungsi baru untuk mengambil link unduhan (menggunakan API eksternal untuk stabilitas)
-async function getVideoDownloadLink(url, quality) {
+// Fungsi untuk mengunduh menggunakan y2mate API (dari kode sebelumnya)
+async function y2mateDownload(url, quality) {
     try {
-        const videoId = url.match(/(?:v=|\/|embed\/|youtu.be\/)([a-zA-Z0-9_-]{11})/)?.[1];
-        if (!videoId) throw new Error("Video ID tidak valid.");
-
-        // Menggunakan API dari cobalt.tools yang lebih andal
-        const response = await axios.post(`https://co.wuk.sh/api/json`, {
-            url: `https://www.youtube.com/watch?v=${videoId}`,
-            vQuality: quality.replace('p', ''), // Kirim kualitas tanpa 'p'
-            isAudioOnly: false
-        }, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
+        const { data } = await axios.get(`https://www.y2mate.com/mates/analyze/ajax`, {
+            params: { url, q_auto: 0, ajax: 1 }
         });
+        const videoId = /var k = \"(.*?)\";/.exec(data.result)[1];
+        const videoResults = data.result.match(/<a href="#" rel="nofollow" type="button" class="btn btn-success" data-fquality="(.*?)"/g);
+        if (!videoResults) throw new Error("Tidak ada kualitas video yang ditemukan.");
 
-        if (response.data.status === 'stream') {
-            return response.data.url;
-        } else {
-            throw new Error(response.data.text || "Gagal mendapatkan link unduhan.");
-        }
+        const availableQualities = videoResults.map(res => res.match(/data-fquality="(.*?)"/)[1]);
+        const chosenQuality = availableQualities.includes(quality) ? quality : availableQualities[0];
+
+        const convertResponse = await axios.post(`https://www.y2mate.com/mates/convert`, new URLSearchParams({
+            type: 'youtube',
+            _id: videoId,
+            v_id: url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/)[1],
+            ajax: '1', token: '', ftype: 'mp4', fquality: chosenQuality,
+        }));
+        
+        const downloadLink = /<a href="(.*?)"/.exec(convertResponse.data.result)[1];
+        return { downloadLink, chosenQuality };
     } catch (error) {
-        console.error("Error saat mengambil link unduhan:", error.message);
         throw new Error("Gagal berkomunikasi dengan server unduhan. Coba lagi nanti.");
     }
 }
 
-
 module.exports = {
   name: "ytmp4",
   alias: ["ytv"],
-  description: "Unduh video dari YouTube dengan pilihan kualitas.",
+  description: "Unduh video dari YouTube dengan pilihan kualitas HD.",
   execute: async (msg, { bot, args, usedPrefix, command }) => {
     const url = args[0];
-    const quality = args[1]; // Kualitas yang dipilih (misal: 1080p)
+    const quality = args[1]?.replace('p', '');
 
-    if (!url) return msg.reply("❌ Masukkan URL YouTube yang valid.");
-    
-    const videoId = url.match(/(?:v=|\/|embed\/|youtu.be\/)([a-zA-Z0-9_-]{11})/)?.[1];
-    if (!videoId) return msg.reply("❌ URL YouTube tidak valid atau tidak dapat menemukan Video ID.");
+    if (!url) {
+      return msg.reply("❌ Masukkan URL YouTube yang valid.");
+    }
+    const videoId = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/)?.[1];
+    if (!videoId) {
+        return msg.reply("❌ URL YouTube tidak valid atau tidak dapat menemukan Video ID.");
+    }
 
     try {
         await msg.react("⏳");
-        
-        // Menggunakan ytdl-core untuk mendapatkan info (lebih andal untuk metadata)
-        const ytdl = require('@distube/ytdl-core');
-        const info = await ytdl.getInfo(`https://www.youtube.com/watch?v=${videoId}`);
-        const videoTitle = info.videoDetails.title;
-        const thumbnailUrl = info.videoDetails.thumbnails.slice(-1)[0].url;
+        const videoInfo = await yts({ videoId });
+        if (!videoInfo) return msg.reply("❌ Video tidak ditemukan.");
 
         // Jika kualitas belum dipilih, tawarkan tombol
         if (!quality) {
-            const formats = ytdl.filterFormats(info.formats, 'videoandaudio').filter(f => f.container === 'mp4' && f.hasVideo && f.hasAudio);
-            const uniqueQualities = [...new Set(formats.map(f => f.qualityLabel))].filter(Boolean);
-
-            if (uniqueQualities.length === 0) {
-                return msg.reply("Tidak ada pilihan kualitas video yang tersedia untuk link ini.");
-            }
-
-            // --- PERBAIKAN: Struktur Tombol Dinamis untuk 'lily-baileys' ---
-            // Kita gunakan hydratedTemplate untuk memastikan 'id' (perintah) yang dikirim
-            const templateButtons = uniqueQualities.map((q, i) => ({
-                index: i + 1,
-                // Tombol ini akan mengirim 'id' sebagai balasan
-                quickReplyButton: { 
-                    displayText: `Kualitas ${q}`, 
-                    id: `${usedPrefix + command} ${url} ${q}` 
-                }
-            }));
+            // --- PERBAIKAN: Struktur Tombol untuk 'lily-baileys' ---
+            const templateButtons = [
+                { index: 1, quickReplyButton: { displayText: 'Kualitas 720p', id: `${usedPrefix + command} ${url} 720p` } },
+                { index: 2, quickReplyButton: { displayText: 'Kualitas 480p', id: `${usedPrefix + command} ${url} 480p` } },
+                { index: 3, quickReplyButton: { displayText: 'Kualitas 360p', id: `${usedPrefix + command} ${url} 360p` } },
+            ];
             
-            const templateMessage = {
-                text: `*${videoTitle}*\n\nSilakan pilih salah satu kualitas video di bawah ini:`,
-                footer: bot.user.name,
+            const message = {
+                text: `*${videoInfo.title}*\n\nSilakan pilih salah satu kualitas video di bawah ini:`,
+                footer: 'Tekan tombol untuk mengunduh',
                 templateButtons: templateButtons,
-                image: { url: thumbnailUrl }
+                image: { url: videoInfo.thumbnail }
             };
-            
-            await bot.sendMessage(msg.from, templateMessage, { quoted: msg });
+            // --- AKHIR PERBAIKAN ---
+
+            await bot.sendMessage(msg.from, message, { quoted: msg });
             return;
         }
 
-        await msg.reply(`✅ Memproses video *(${quality})*...`);
+        await msg.reply(`✅ Memproses video *(${quality}p)*... Ini mungkin memakan waktu.`);
+        const { downloadLink, chosenQuality } = await y2mateDownload(url, quality);
 
-        // Mengunduh menggunakan API eksternal yang lebih stabil
-        const downloadLink = await getVideoDownloadLink(url, quality);
-
+        // Langsung kirim video dari URL tanpa menyimpan ke file
         await bot.sendMessage(msg.from, { 
             video: { url: downloadLink },
             mimetype: 'video/mp4',
-            caption: `✅ Video berhasil diunduh:\n*${videoTitle}* (${quality})`
+            caption: `✅ Video berhasil diunduh:\n*${videoInfo.title}* (${chosenQuality}p)`
         }, { quoted: msg });
 
         await msg.react("✅");
