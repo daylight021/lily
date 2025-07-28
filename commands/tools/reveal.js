@@ -1,4 +1,4 @@
-const { downloadMediaMessage } = require("@whiskeysockets/baileys");
+const { downloadMediaMessage } = require("lily-baileys");
 
 module.exports = {
   name: "reveal",
