@@ -34,7 +34,7 @@ async function startBot() {
   // Langkah 2: Membuat koneksi dengan konfigurasi yang BENAR
   const bot = makeWASocket({
     version, // <-- Kunci #1: Menyuntikkan versi
-    logger: pino({ level: 'silent' }),
+    logger: Pino({ level: 'silent' }),
     printQRInTerminal: false,
     auth: state,
     browser: Browsers.macOS('Desktop'), // <-- Kunci #2: Mengidentifikasi sebagai browser
