@@ -68,6 +68,7 @@ module.exports = {
                 return msg.reply("Tidak ada pilihan kualitas video yang tersedia untuk link ini.");
             }
 
+            // --- PERBAIKAN: Struktur Tombol Dinamis untuk 'lily-baileys' ---
             // Kita gunakan hydratedTemplate untuk memastikan 'id' (perintah) yang dikirim
             const templateButtons = uniqueQualities.map((q, i) => ({
                 index: i + 1,
