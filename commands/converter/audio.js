@@ -1,5 +1,5 @@
 const { Worker } = require("worker_threads");
-const { downloadMediaMessage } = require("@whiskeysockets/baileys");
+const { downloadMediaMessage } = require("lily-baileys");
 const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
