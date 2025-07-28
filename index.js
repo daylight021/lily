@@ -49,14 +49,19 @@ async function startBot() {
   bot.store = store;
 
   // Cek apakah bot belum pernah terhubung/registrasi
-  if (!bot.authState.creds.registered) {
+if (!bot.authState.creds.registered) {
     const phoneNumber = await question('Masukan Nomor Whatsapp Anda: ');
-    let code = await bot.requestPairingCode(phoneNumber);
+    const code = await bot.requestPairingCode(phoneNumber);
 
-    // Membersihkan kode dari karakter non-printable (termasuk kode warna)
-    code = code.replace(/["\u001b[0-9;]*m]/g, '');
-
-    console.log(`Pairing code: ${code}`);
+    // PERIKSA APAKAH KODE BERHASIL DIDAPATKAN
+    if (code) {
+      // Jika 'code' ada, bersihkan dan tampilkan
+      const cleanedCode = code.replace(/["\u001b[0-9;]*m]/g, '');
+      console.log(`Pairing code: ${cleanedCode}`);
+    } else {
+      // Jika 'code' tidak ada (undefined), beri pesan error
+      console.error('[GAGAL] Tidak bisa mendapatkan pairing code. Pastikan nomor telepon benar dan koneksi internet stabil. Silakan coba lagi.');
+    }
   }
 
   const dbPath = path.join(__dirname, 'database.json');
