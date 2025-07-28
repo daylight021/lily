@@ -46,7 +46,20 @@ async function startBot() {
     const phoneNumber = await question('Masukan Nomor Whatsapp Anda (contoh: 628123xxxx): ');
     try {
       const code = await bot.requestPairingCode(phoneNumber);
-      console.log(`Kode Pairing Anda: ${code.replace(/["\u001b[0-9;]*m]/g, '')}`);
+
+      // --- Langkah Diagnostik ---
+      console.log(`[DEBUG] Nilai mentah yang diterima: ${code}`);
+
+      // --- Langkah Penanganan ---
+      if (code && code.toUpperCase() !== 'YOURCODE') {
+        // Jika kode ada dan BUKAN "YOURCODE", tampilkan seperti biasa
+        const cleanedCode = code.replace(/["\u001b[0-9;]*m]/g, '');
+        console.log(`Kode Pairing Anda: ${cleanedCode}`);
+      } else {
+        // Jika kode tidak ada atau berisi "YOURCODE", beri pesan error
+        console.error('[GAGAL] Library mengembalikan nilai yang tidak valid. Ini kemungkinan bug pada "lily-baileys". Tidak ada kode pairing yang bisa ditampilkan.');
+      }
+
     } catch (error) {
       console.error('Gagal meminta pairing code:', error);
     }
@@ -70,7 +83,7 @@ async function startBot() {
   });
 
   bot.ev.on("messages.upsert", require("./events/CommandHandler").chatUpdate.bind(bot));
-  
+
   bot.ev.on("group-participants.update", async (update) => {
     const { id, participants, action } = update;
 
