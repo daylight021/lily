@@ -1,11 +1,5 @@
 require("dotenv").config();
-const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  DisconnectReason,
-  makeCacheableSignalKeyStore,
-  makeInMemoryStore,
-} = require('lily-baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore, getContentType, Browsers } = require('lily-baileys');
 
 const Pino = require('pino');
 const { Low, JSONFile } = require("./lib/lowdb");
@@ -31,85 +25,52 @@ const question = (text) => {
 };
 
 async function startBot() {
-  console.log('[LOG] Memulai bot...');
-  const { state, saveCreds } = await useMultiFileAuthState("sessions");
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
+  // Langkah 1: Mengambil versi WA terbaru
+  const { version, isLatest } = await fetchLatestBaileysVersion();
+  console.log(`Menggunakan WA v${version.join('.')}, Terbaru: ${isLatest}`);
+
+  // Langkah 2: Membuat koneksi dengan konfigurasi yang BENAR
   const bot = makeWASocket({
-    // Konfigurasi ini membuat log error lebih rapi dan berwarna
-    logger: pino({
-      level: 'silent',
-      transport: {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          ignore: 'pid,hostname'
-        }
-      }
-    }),
-
-    browser: ['Chrome (Linux)', '', ''],
-
-    auth: state,
+    version, // <-- Kunci #1: Menyuntikkan versi
+    logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
+    auth: state,
+    browser: Browsers.macOS('Desktop'), // <-- Kunci #2: Mengidentifikasi sebagai browser
   });
 
-  store.bind(bot.ev);
-  bot.store = store;
-
-  // Cek apakah bot belum pernah terhubung/registrasi
+  // Langkah 3: Logika pairing code (hanya jika belum ada sesi)
   if (!bot.authState.creds.registered) {
-    const phoneNumber = await question('Masukan Nomor Whatsapp Anda: ');
-    const code = await bot.requestPairingCode(phoneNumber);
-
-    // PERIKSA APAKAH KODE BERHASIL DIDAPATKAN
-    if (code) {
-      // Jika 'code' ada, bersihkan dan tampilkan
-      const cleanedCode = code.replace(/["\u001b[0-9;]*m]/g, '');
-      console.log(`Pairing code: ${cleanedCode}`);
-    } else {
-      // Jika 'code' tidak ada (undefined), beri pesan error
-      console.error('[GAGAL] Tidak bisa mendapatkan pairing code. Pastikan nomor telepon benar dan koneksi internet stabil. Silakan coba lagi.');
+    console.log('Tidak ada sesi terdaftar, memulai pairing code...');
+    const phoneNumber = await question('Masukan Nomor Whatsapp Anda (contoh: 628123xxxx): ');
+    try {
+      const code = await bot.requestPairingCode(phoneNumber);
+      console.log(`Kode Pairing Anda: ${code.replace(/["\u001b[0-9;]*m]/g, '')}`);
+    } catch (error) {
+      console.error('Gagal meminta pairing code:', error);
     }
+  } else {
+    console.log('Sesi ditemukan, bot terhubung.');
   }
 
-  const dbPath = path.join(__dirname, 'database.json');
-  bot.db = new Low(new JSONFile(dbPath));
-  await bot.db.read();
-  bot.db.data = bot.db.data || { users: {}, groups: {} };
-  setInterval(() => { bot.db.write().catch(console.error); }, 30 * 1000);
+  bot.ev.on('creds.update', saveCreds);
 
-  bot.commands = new Collection();
-  loadCommands("commands", bot);
-  chokidar.watch(path.join(__dirname, "commands"), { persistent: true, ignoreInitial: true })
-    .on("all", () => loadCommands("commands", bot));
-
-  bot.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    // --- PERBAIKAN UTAMA: Menangkap Pairing Code dari event ---
-    // Properti 'qr' sekarang berisi pairing code, bukan data gambar
-    if (qr) {
-      const code = qr.match(/.{1,4}/g)?.join("-") || qr;
-      console.log(`✅ Kode Pairing Anda: ${code}`);
-      console.log("Buka WhatsApp > Perangkat Tertaut > Tautkan perangkat > Tautkan dengan nomor telepon.");
-    }
-    // --- AKHIR PERBAIKAN ---
-
-    if (connection === "close") {
+  bot.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update;
+    if (connection === 'close') {
       const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log(`[CONNECTION] Terputus karena: ${lastDisconnect.error}, menyambung ulang: ${shouldReconnect}`);
+      console.log('Koneksi terputus karena:', lastDisconnect.error, ', menyambungkan kembali:', shouldReconnect);
       if (shouldReconnect) {
         startBot();
-      } else {
-        console.log('[CONNECTION] Terputus permanen. Hapus folder "sessions" dan mulai ulang.');
       }
-    } else if (connection === "open") {
-      console.log(`✅ Koneksi berhasil tersambung sebagai ${bot.user.name || 'Bot'}`);
+    } else if (connection === 'open') {
+      console.log('Bot berhasil tersambung!');
     }
   });
 
-  bot.ev.on("creds.update", saveCreds);
   bot.ev.on("messages.upsert", require("./events/CommandHandler").chatUpdate.bind(bot));
+  
   bot.ev.on("group-participants.update", async (update) => {
     const { id, participants, action } = update;
 
