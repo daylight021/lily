@@ -1,117 +1,124 @@
 const ytdl = require('@distube/ytdl-core');
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
 const axios = require('axios');
 
-const TEMP_DIR = path.join(__dirname, '../../temp');
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
-
-async function getYtInfo(url) {
-    const info = await ytdl.getInfo(url);
-    const videoFormats = ytdl.filterFormats(info.formats, 'videoonly').filter(f => f.container === 'mp4');
-    const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
-    
-    if (videoFormats.length === 0 || audioFormats.length === 0) {
-        throw new Error("Tidak ada format video/audio terpisah yang ditemukan.");
+// Fungsi untuk memformat durasi dari detik menjadi HH:MM:SS atau MM:SS
+function formatDuration(seconds) {
+    if (seconds > 3600) {
+        return new Date(seconds * 1000).toISOString().substr(11, 8);
+    } else {
+        return new Date(seconds * 1000).toISOString().substr(14, 5);
     }
-    return { info, videoFormats, audioFormats };
 }
 
-function mergeVideoAudio(videoPath, audioPath, outputPath) {
-    return new Promise((resolve, reject) => {
-        const command = `ffmpeg -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac "${outputPath}"`;
-        exec(command, (error, stdout, stderr) => {
-            if (error) {
-                console.error('FFmpeg Error:', stderr);
-                return reject(new Error(`Gagal menggabungkan file: ${stderr}`));
-            }
-            resolve(outputPath);
-        });
-    });
+// Fungsi untuk memformat angka (misal: 1500 -> 1.5K)
+function formatNumber(num) {
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return num;
 }
+
+// Fungsi untuk mendapatkan link download dari API eksternal (lebih stabil)
+async function getVideoDownloadLink(videoId, quality) {
+    try {
+        const response = await axios.post(`https://co.wuk.sh/api/json`, {
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+            vQuality: quality.replace('p', ''), // Kirim kualitas tanpa 'p'
+            isAudioOnly: false
+        }, {
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        });
+
+        if (response.data.status === 'stream') {
+            return response.data.url;
+        } else {
+            throw new Error(response.data.text || "Gagal mendapatkan link unduhan dari API.");
+        }
+    } catch (error) {
+        console.error("Error saat mengambil link unduhan:", error.message);
+        throw new Error("Gagal berkomunikasi dengan server unduhan. Coba lagi nanti.");
+    }
+}
+
 
 module.exports = {
   name: "ytmp4",
   alias: ["ytv"],
-  description: "Unduh video dari YouTube dengan pilihan kualitas HD.",
-  execute: async (msg, { args, bot, usedPrefix, command }) => {
+  description: "Unduh video dari YouTube dengan pilihan kualitas.",
+  execute: async (msg, { bot, args, usedPrefix, command }) => {
     const url = args[0];
     const quality = args[1];
 
     if (!url || !ytdl.validateURL(url)) {
-      return msg.reply("❌ Masukkan URL YouTube yang valid.");
+      return msg.reply(`❌ Masukkan URL YouTube yang valid.\nContoh: *${usedPrefix + command} https://youtu.be/example*`);
     }
+
+    const videoId = ytdl.getVideoID(url);
 
     try {
         await msg.react("⏳");
-        const { info, videoFormats } = await getYtInfo(url);
-        const videoTitle = info.videoDetails.title;
-        const thumbnailUrl = info.videoDetails.thumbnails.slice(-1)[0].url;
-
+        
+        const info = await ytdl.getInfo(videoId);
+        const details = info.videoDetails;
+        
+        // --- Jika Kualitas Belum Dipilih ---
         if (!quality) {
-            const uniqueQualities = [...new Set(videoFormats.map(f => f.qualityLabel))].filter(Boolean);
+            // 1. Kumpulkan informasi video
+            const videoTitle = details.title;
+            const thumbnailUrl = details.thumbnails.slice(-1)[0].url;
+            const views = formatNumber(details.viewCount);
+            const likes = formatNumber(details.likes);
+            const duration = formatDuration(details.lengthSeconds);
+
+            // 2. Buat caption yang informatif
+            let caption = `*${videoTitle}*\n\n`;
+            caption += `👀 Tayangan: *${views}*\n`;
+            caption += `👍 Suka: *${likes}*\n`;
+            caption += `⏳ Durasi: *${duration}*\n\n`;
+            caption += `Silakan pilih salah satu kualitas video di bawah ini:`;
+
+            // 3. Filter format video yang tersedia
+            const formats = ytdl.filterFormats(info.formats, 'videoandaudio').filter(f => f.container === 'mp4' && f.hasVideo && f.hasAudio);
+            const uniqueQualities = [...new Set(formats.map(f => f.qualityLabel))].filter(Boolean).sort((a, b) => parseInt(b) - parseInt(a));
+
             if (uniqueQualities.length === 0) {
-                return msg.reply("Tidak ada pilihan kualitas video yang tersedia untuk link ini.");
+                return msg.reply("Tidak ada pilihan kualitas video MP4 yang tersedia untuk link ini.");
             }
 
-            const buttons = uniqueQualities.map(q => ({
-                buttonId: `${usedPrefix + command} ${url} ${q}`,
-                buttonText: { displayText: `Kualitas ${q}` },
-                type: 1
+            // 4. Buat tombol template (quick reply)
+            const templateButtons = uniqueQualities.map((q, i) => ({
+                index: i + 1,
+                quickReplyButton: { 
+                    displayText: `Kualitas ${q}`, 
+                    // ID ini adalah perintah lengkap yang akan dikirim pengguna saat tombol diklik
+                    id: `${usedPrefix + command} ${url} ${q}` 
+                }
             }));
             
-            const buttonMessage = {
-                // Saat menggunakan gambar, 'caption' digunakan untuk teks utama, bukan 'text'
-                caption: `*${videoTitle}*\n\nSilakan pilih salah satu kualitas video di bawah ini:`,
-                footer: 'Tekan tombol untuk mengunduh',
-                buttons: buttons,
-                image: { url: thumbnailUrl },
-                headerType: 4 // Header Tipe 4 adalah untuk gambar
+            // 5. Kirim pesan template
+            const templateMessage = {
+                text: caption,
+                footer: bot.user.name,
+                templateButtons: templateButtons,
+                image: { url: thumbnailUrl }
             };
-
-            await bot.sendMessage(msg.from, buttonMessage, { quoted: msg });
+            
+            await bot.sendMessage(msg.from, templateMessage, { quoted: msg });
             return;
         }
 
-        const selectedVideo = videoFormats.find(f => f.qualityLabel === quality);
-        if (!selectedVideo) {
-            await msg.react("⚠️");
-            return msg.reply(`❌ Kualitas "${quality}" tidak ditemukan atau tidak valid.`);
-        }
+        // --- Jika Kualitas SUDAH Dipilih ---
+        await msg.reply(`✅ Memproses video *'${details.title}'* (${quality})...`);
 
-        const { audioFormats } = await getYtInfo(url);
-        const bestAudio = audioFormats.sort((a, b) => b.audioBitrate - a.audioBitrate)[0];
+        const downloadLink = await getVideoDownloadLink(videoId, quality);
 
-        await msg.reply(`✅ Mengunduh video *(${quality})* dan audio... Ini mungkin memakan waktu.`);
-
-        const timestamp = Date.now();
-        const videoPath = path.join(TEMP_DIR, `video_${timestamp}.mp4`);
-        const audioPath = path.join(TEMP_DIR, `audio_${timestamp}.m4a`);
-        const outputPath = path.join(TEMP_DIR, `output_${timestamp}.mp4`);
-
-        const videoStream = (await axios.get(selectedVideo.url, { responseType: 'stream' })).data;
-        const audioStream = (await axios.get(bestAudio.url, { responseType: 'stream' })).data;
-        
-        await Promise.all([
-            new Promise(resolve => videoStream.pipe(fs.createWriteStream(videoPath)).on('finish', resolve)),
-            new Promise(resolve => audioStream.pipe(fs.createWriteStream(audioPath)).on('finish', resolve))
-        ]);
-
-        await msg.reply("Menggabungkan video dan audio dengan FFmpeg...");
-        await mergeVideoAudio(videoPath, audioPath, outputPath);
-
+        // Kirim video langsung dari URL download
         await bot.sendMessage(msg.from, { 
-            video: fs.readFileSync(outputPath),
+            video: { url: downloadLink },
             mimetype: 'video/mp4',
-            caption: `✅ Video berhasil diunduh:\n*${videoTitle}*`
+            caption: `✅ Video berhasil diunduh:\n*${details.title}* (${quality})`
         }, { quoted: msg });
 
         await msg.react("✅");
-
-        fs.unlinkSync(videoPath);
-        fs.unlinkSync(audioPath);
-        fs.unlinkSync(outputPath);
 
     } catch (err) {
       console.error("Proses unduh ytmp4 gagal:", err);
