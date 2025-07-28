@@ -37,7 +37,7 @@ async function startBot() {
   const bot = makeWASocket({
     logger: Pino({ level: "silent" }),
     printQRInTerminal: false, // Penting: Matikan QR code bawaan
-    browser: ['My-WhatsApp-Bot', 'Chrome', '1.0.0'],
+    browser: ['Chrome (Linux)', '', ''],
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, Pino({ level: 'silent' }).child({ level: 'silent' })),
