@@ -48,21 +48,16 @@ async function startBot() {
   store.bind(bot.ev);
   bot.store = store;
 
-  // --- PERBAIKAN UTAMA: LOGIKA PAIRING CODE YANG BENAR ---
   // Cek apakah bot belum pernah terhubung/registrasi
   if (!bot.authState.creds.registered) {
-    let phoneNumber = process.env.BOT_NUMBER;
-    if (!phoneNumber) {
-      phoneNumber = await question("Masukkan nomor WhatsApp Anda (format 62xxxxxxxx): ");
-    }
-    phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
+    const phoneNumber = await question('Masukan Nomor Whatsapp Anda: ');
+    let code = await bot.requestPairingCode(phoneNumber);
 
-    // Meminta kode pairing. Kode akan diterima di event 'connection.update'
-    setTimeout(async () => {
-      await bot.requestPairingCode(phoneNumber);
-    }, 3000); // Jeda untuk memastikan socket siap
+    // Membersihkan kode dari karakter non-printable (termasuk kode warna)
+    code = code.replace(/["\u001b[0-9;]*m]/g, '');
+
+    console.log(`Pairing code: ${code}`);
   }
-  // --- AKHIR PERBAIKAN ---
 
   const dbPath = path.join(__dirname, 'database.json');
   bot.db = new Low(new JSONFile(dbPath));
