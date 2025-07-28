@@ -1,13 +1,14 @@
 require("dotenv").config();
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore, getContentType, Browsers } = require('lily-baileys');
-
 const Pino = require('pino');
-const { Low, JSONFile } = require("./lib/lowdb");
 const fs = require("fs");
 const path = require("path");
-const chokidar = require("chokidar");
 const Collection = require("./lib/CommandCollections");
 const readline = require("readline");
+
+// Install: npm install qrcode express
+const qrcode = require('qrcode');
+const express = require('express');
 
 const store = makeInMemoryStore({ logger: Pino().child({ level: 'silent', stream: 'store' }) });
 
@@ -24,64 +25,104 @@ const question = (text) => {
   });
 };
 
-// Fungsi untuk menunggu dan retry pairing code
-async function waitForValidPairingCode(bot, phoneNumber, maxAttempts = 5) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    console.log(`🔄 Mencoba mendapatkan pairing code (attempt ${attempt}/${maxAttempts})...`);
+// HTTP Server untuk QR Display
+function startQRServer(qrData) {
+  const app = express();
+  
+  app.get('/', (req, res) => {
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>WhatsApp QR Code</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body { display:flex; justify-content:center; align-items:center; height:100vh; margin:0; background:#f0f0f0; font-family: Arial, sans-serif; }
+          .container { text-align:center; background:white; padding:30px; border-radius:15px; box-shadow:0 8px 16px rgba(0,0,0,0.1); }
+          #qrcode { margin: 20px 0; }
+          h2 { color: #25D366; margin-bottom: 10px; }
+          p { color: #666; margin: 10px 0; }
+          .steps { text-align: left; margin: 20px 0; }
+          .step { margin: 5px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>🔗 WhatsApp Bot Connection</h2>
+          <div id="qrcode"></div>
+          <div class="steps">
+            <div class="step">1️⃣ Buka WhatsApp di ponsel</div>
+            <div class="step">2️⃣ Masuk ke Settings (⚙️)</div>
+            <div class="step">3️⃣ Pilih "Linked Devices"</div>
+            <div class="step">4️⃣ Tap "Link a Device"</div>
+            <div class="step">5️⃣ Scan QR code di atas</div>
+          </div>
+          <p style="color: #25D366; font-weight: bold;">✅ Halaman ini akan otomatis tertutup setelah berhasil</p>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+        <script>
+          QRCode.toCanvas(document.getElementById('qrcode'), '${qrData}', {
+            width: 256,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+          
+          // Auto refresh setiap 30 detik
+          setTimeout(() => {
+            window.location.reload();
+          }, 30000);
+        </script>
+      </body>
+      </html>
+    `);
+  });
+  
+  const server = app.listen(3000, '0.0.0.0', () => {
+    console.log('🌐 QR Server aktif!');
+    console.log('📱 Buka di browser: http://your-vps-ip:3000');
+    console.log('📋 Atau gunakan tunnel: ngrok http 3000');
+  });
+  
+  return server;
+}
+
+// Save QR sebagai file PNG
+async function saveQRToFile(qrData) {
+  try {
+    await qrcode.toFile('whatsapp-qr.png', qrData, {
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      },
+      width: 400,
+      margin: 2
+    });
     
-    try {
-      // Tunggu sebentar sebelum mencoba
-      if (attempt > 1) {
-        console.log('⏳ Menunggu 3 detik sebelum mencoba lagi...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
-      
-      const code = await bot.requestPairingCode(phoneNumber);
-      
-      console.log(`[DEBUG] Raw response dari lily-baileys:`, JSON.stringify(code));
-      
-      // Cek apakah kode valid
-      if (code && 
-          typeof code === 'string' && 
-          code.trim() !== '' &&
-          code.toUpperCase() !== 'YOURCODE' &&
-          !/undefined|null|error/i.test(code)) {
-        
-        // Bersihkan kode dari karakter ansi dan whitespace
-        const cleanCode = code.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
-                              .replace(/['"]/g, '')
-                              .trim();
-        
-        // Validasi format kode (biasanya 6-8 karakter alphanumeric)
-        if (cleanCode.length >= 6 && /^[A-Z0-9]+$/.test(cleanCode)) {
-          console.log(`✅ Pairing code berhasil didapat: ${cleanCode}`);
-          console.log(`📱 Buka WhatsApp > Settings > Linked Devices > Link a Device`);
-          console.log(`📝 Masukkan kode: ${cleanCode}`);
-          return cleanCode;
-        }
-      }
-      
-      console.log(`❌ Attempt ${attempt}: Kode tidak valid (${code})`);
-      
-    } catch (error) {
-      console.log(`❌ Attempt ${attempt}: Error -`, error.message);
-    }
+    console.log('📷 QR Code saved as: whatsapp-qr.png');
+    console.log('📂 Download file ini ke ponsel dan scan dengan WhatsApp');
     
-    if (attempt === maxAttempts) {
-      throw new Error('Gagal mendapatkan pairing code setelah beberapa percobaan');
-    }
+    // Generate base64 untuk copy-paste
+    const base64 = await qrcode.toDataURL(qrData);
+    console.log('🔗 Base64 QR (untuk online QR reader):');
+    console.log(base64.substring(0, 50) + '...[truncated]');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Gagal save QR:', error);
+    return false;
   }
 }
 
 async function startBot() {
   try {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
-
-    // Ambil versi WA terbaru
     const { version, isLatest } = await fetchLatestBaileysVersion();
-    console.log(`📱 Menggunakan WA v${version.join('.')}, Terbaru: ${isLatest}`);
+    
+    console.log(`📱 WA v${version.join('.')}, Latest: ${isLatest}`);
 
-    // Buat koneksi socket
     const bot = makeWASocket({
       version,
       logger: Pino({ level: 'silent' }),
@@ -90,17 +131,8 @@ async function startBot() {
       browser: Browsers.macOS('Desktop'),
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
-      // Tambahan opsi untuk stabilitas
-      retryRequestDelayMs: 5000,
-      maxMsgRetryCount: 3,
-      msgRetryCounterCache: new Map(),
-      generateHighQualityLinkPreview: false,
-      syncFullHistory: false,
-      markOnlineOnConnect: false,
     });
 
-    // Inisialisasi commands collection jika belum ada
     if (!bot.commands) {
       bot.commands = new Collection();
     }
@@ -108,84 +140,129 @@ async function startBot() {
     // Load commands
     loadCommands('commands', bot);
 
-    // Proses pairing code jika belum terdaftar
+    let qrServer = null;
+
+    // Handle pairing/QR
     if (!bot.authState.creds.registered) {
-      console.log('🔐 Tidak ada sesi terdaftar, memulai proses pairing...');
+      console.log('🔐 Sesi tidak ditemukan');
+      console.log('🤔 Pilih metode koneksi:');
+      console.log('1. Pairing Code (kemungkinan tidak bekerja)');
+      console.log('2. QR via HTTP Server (recommended)');
+      console.log('3. QR ke File PNG');
+      console.log('4. Manual Session Transfer');
       
-      const phoneNumber = await question('📞 Masukkan nomor WhatsApp (format: 628123456789): ');
+      const choice = await question('Pilihan (1-4): ');
       
-      // Validasi dan bersihkan nomor
-      const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
-      
-      if (!cleanNumber.startsWith('62')) {
-        console.error('❌ Nomor harus dimulai dengan 62 (kode negara Indonesia)');
-        process.exit(1);
+      switch(choice) {
+        case '1':
+          // Coba pairing code
+          const phoneNumber = await question('📞 Nomor WhatsApp (628xxx): ');
+          try {
+            const code = await bot.requestPairingCode(phoneNumber.replace(/[^0-9]/g, ''));
+            if (code && code !== 'YOURCODE') {
+              console.log(`🎉 Pairing Code: ${code}`);
+            } else {
+              console.log('❌ Pairing code gagal, switching ke QR server...');
+              // Will handle in connection.update
+            }
+          } catch (error) {
+            console.log('❌ Pairing error:', error.message);
+          }
+          break;
+          
+        case '2':
+          console.log('🌐 Mode HTTP Server dipilih');
+          console.log('⏳ Tunggu QR code...');
+          break;
+          
+        case '3':
+          console.log('📁 Mode File PNG dipilih');
+          console.log('⏳ Tunggu QR code...');
+          break;
+          
+        case '4':
+          console.log('📋 MANUAL SESSION TRANSFER:');
+          console.log('1. Setup bot di komputer lokal dengan QR');
+          console.log('2. Copy folder auth_info_baileys ke VPS ini');
+          console.log('3. Restart bot');
+          console.log('4. Command: scp -r auth_info_baileys user@vps:/path/to/bot/');
+          process.exit(0);
+          break;
+          
+        default:
+          console.log('🌐 Default: HTTP Server mode');
       }
-      
-      if (cleanNumber.length < 10 || cleanNumber.length > 15) {
-        console.error('❌ Format nomor tidak valid');
-        process.exit(1);
-      }
-      
-      console.log(`📱 Memproses nomor: ${cleanNumber}`);
-      
-      // Tunggu bot siap
-      console.log('⏳ Menunggu bot siap...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      try {
-        const pairingCode = await waitForValidPairingCode(bot, cleanNumber);
-        console.log(`\n🎉 PAIRING CODE ANDA: ${pairingCode}`);
-        console.log('📋 Copy kode di atas dan masukkan ke WhatsApp Anda\n');
-        
-      } catch (error) {
-        console.error('💥 Gagal mendapatkan pairing code:', error.message);
-        console.log('\n🔧 Troubleshooting:');
-        console.log('1. Pastikan nomor WhatsApp benar dan aktif');
-        console.log('2. Pastikan WhatsApp tidak sedang login di device lain');
-        console.log('3. Coba restart bot dan ulangi proses');
-        console.log('4. Pastikan koneksi internet stabil\n');
-        process.exit(1);
-      }
-      
-    } else {
-      console.log('✅ Sesi ditemukan, bot akan terhubung otomatis');
     }
 
-    // Event: Update credentials
     bot.ev.on('creds.update', saveCreds);
 
-    // Event: Connection update
-    bot.ev.on('connection.update', (update) => {
+    bot.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
-      
-      if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+
+      // Handle QR Code
+      if (qr) {
+        console.log('📱 QR Code received!');
         
-        console.log('🔌 Koneksi terputus:', lastDisconnect?.error?.message || 'Unknown error');
-        console.log('🔄 Akan reconnect:', shouldReconnect);
+        try {
+          // Start HTTP Server
+          if (!qrServer) {
+            qrServer = startQRServer(qr);
+          }
+          
+          // Save QR to file
+          await saveQRToFile(qr);
+          
+          console.log('✨ Multiple QR options available:');
+          console.log('1. 🌐 HTTP: http://your-vps-ip:3000');
+          console.log('2. 📁 File: whatsapp-qr.png');
+          console.log('3. 🔗 Base64: check console output above');
+          
+        } catch (error) {
+          console.error('❌ QR handling error:', error);
+        }
+      }
+
+      if (connection === 'open') {
+        console.log('🚀 Bot connected successfully!');
+        console.log(`📱 Connected as: ${bot.user?.name || 'Unknown'}`);
+        
+        // Close QR server if running
+        if (qrServer) {
+          qrServer.close();
+          qrServer = null;
+          console.log('🔒 QR Server closed');
+        }
+        
+        // Delete QR file
+        if (fs.existsSync('whatsapp-qr.png')) {
+          fs.unlinkSync('whatsapp-qr.png');
+          console.log('🗑️ QR file deleted');
+        }
+      }
+
+      if (connection === 'close') {
+        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+        
+        console.log('🔌 Connection closed:', lastDisconnect?.error);
+        
+        if (qrServer) {
+          qrServer.close();
+          qrServer = null;
+        }
         
         if (shouldReconnect) {
-          console.log('⏳ Reconnecting dalam 5 detik...');
-          setTimeout(() => {
-            startBot().catch(console.error);
-          }, 5000);
+          console.log('🔄 Reconnecting in 5 seconds...');
+          setTimeout(() => startBot().catch(console.error), 5000);
         } else {
-          console.log('🚪 Bot logout, hapus auth_info_baileys untuk login ulang');
+          console.log('🚪 Logged out. Delete auth_info_baileys to login again');
         }
-      } else if (connection === 'open') {
-        console.log('🚀 Bot berhasil terhubung!');
-        console.log(`📱 Terhubung sebagai: ${bot.user?.name || 'Unknown'}`);
-        console.log(`📞 Nomor: ${bot.user?.id?.split(':')[0] || 'Unknown'}`);
-      } else if (connection === 'connecting') {
-        console.log('🔄 Sedang menghubungkan...');
       }
     });
 
-    // Event: Messages
+    // Message handler
     bot.ev.on("messages.upsert", require("./events/CommandHandler").chatUpdate.bind(bot));
 
-    // Event: Group participants update
+    // Group events
     bot.ev.on("group-participants.update", async (update) => {
       const { id, participants, action } = update;
 
@@ -213,15 +290,13 @@ async function startBot() {
           }
         }
       } catch (error) {
-        console.error("❌ Error pada group participants update:", error);
+        console.error("❌ Group event error:", error);
       }
     });
 
-    return bot;
-
   } catch (error) {
-    console.error('💥 Error pada startBot:', error);
-    throw error;
+    console.error('💥 StartBot error:', error);
+    setTimeout(() => startBot().catch(console.error), 10000);
   }
 }
 
@@ -234,13 +309,13 @@ function loadCommands(dir, bot) {
   const commandsPath = path.join(__dirname, dir);
   
   if (!fs.existsSync(commandsPath)) {
-    console.log(`📂 Folder ${dir} tidak ditemukan, membuat folder...`);
+    console.log(`📂 Creating ${dir} folder...`);
     fs.mkdirSync(commandsPath, { recursive: true });
     return;
   }
   
-  const folders = fs.readdirSync(commandsPath);
   let totalCommands = 0;
+  const folders = fs.readdirSync(commandsPath);
   
   folders.forEach(folder => {
     const folderPath = path.join(commandsPath, folder);
@@ -261,32 +336,28 @@ function loadCommands(dir, bot) {
             if (command.alias && Array.isArray(command.alias)) {
               command.alias.forEach(alias => {
                 bot.commands.set(alias, command);
-                totalCommands++;
               });
             }
           }
         } catch (error) {
-          console.error(`❌ Gagal memuat perintah dari ${filePath}:`, error.message);
+          console.error(`❌ Failed loading ${filePath}:`, error.message);
         }
       });
     }
   });
   
-  console.log(`📋 [COMMANDS] Berhasil dimuat: ${totalCommands} perintah dari ${folders.length} kategori.`);
+  console.log(`📋 Commands loaded: ${totalCommands}`);
 }
 
-// Jalankan bot
-console.log('🤖 Memulai WhatsApp Bot...');
+// Start the bot
+console.log('🤖 Starting WhatsApp Bot...');
+console.log('📋 Multiple connection methods available');
+console.log('🔧 Choose your preferred method when prompted\n');
+
 startBot().catch(error => {
   console.error('💥 Fatal error:', error);
   process.exit(1);
 });
 
-// Handle uncaught exceptions
-process.on("uncaughtException", (error) => {
-  console.error('💥 Uncaught Exception:', error);
-});
-
-process.on("unhandledRejection", (error) => {
-  console.error('💥 Unhandled Rejection:', error);
-});
+process.on("uncaughtException", console.error);
+process.on("unhandledRejection", console.error);
