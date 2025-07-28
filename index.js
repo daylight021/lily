@@ -17,20 +17,18 @@ const chokidar = require("chokidar");
 const qrcode = require('qrcode-terminal');
 const Collection = require("./lib/CommandCollections");
 
-// --- Inisialisasi Store ---
 const store = makeInMemoryStore({ logger: Pino().child({ level: 'silent', stream: 'store' }) });
 
 // Fungsi utama untuk menjalankan bot
 async function startBot() {
   console.log('[LOG] Memulai bot...');
 
-  // --- Manajemen Sesi (Auth State) untuk lily-baileys ---
   const { state, saveCreds } = await useMultiFileAuthState("sessions");
 
   const bot = makeWASocket({
     logger: Pino({ level: "silent" }),
-    printQRInTerminal: true, // Kita akan menangani QR secara manual
-    browser: ['Chrome', '1.0.0'],
+    printQRInTerminal: false, // Kita akan menangani QR secara manual
+    browser: ['My-WhatsApp-Bot', 'Chrome', '1.0.0'],
     auth: {
       creds: state.creds,
       // Menyimpan kunci sinyal di memori cache untuk kecepatan
@@ -59,7 +57,7 @@ async function startBot() {
   chokidar.watch(path.join(__dirname, "commands"), { persistent: true, ignoreInitial: true })
     .on("all", () => loadCommands("commands", bot));
 
-  // --- Event Handler ---
+  // --- PERUBAHAN 3: Event Handler yang Disesuaikan ---
   bot.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
@@ -88,39 +86,31 @@ async function startBot() {
   bot.ev.on("group-participants.update", async (update) => {
     const { id, participants, action } = update;
 
-    // Mengambil metadata grup untuk mendapatkan nama grup
-    let metadata;
     try {
-      metadata = await bot.groupMetadata(id);
-    } catch (e) {
-      console.error("Gagal mengambil metadata grup:", e);
-      return; // Hentikan jika gagal
-    }
+      const metadata = await bot.groupMetadata(id);
 
-    // Loop melalui setiap partisipan yang terpengaruh
-    for (const user of participants) {
-      const userJid = user.split('@')[0];
+      for (const user of participants) {
+        const userJid = user.split('@')[0];
 
-      if (action === "add") {
-        // Ketika ada anggota baru yang ditambahkan atau bergabung
-        const welcomeMessage = `🎉 Selamat Datang di grup *${metadata.subject}*!\n\nHi @${userJid}, semoga betah ya di sini! Jangan lupa baca deskripsi grup.`;
+        if (action === "add") {
+          const welcomeMessage = `🎉 Selamat Datang di grup *${metadata.subject}*!\n\nHi @${userJid}, semoga betah ya di sini! Jangan lupa baca deskripsi grup.`;
 
-        // Kirim pesan sambutan ke grup dengan mention
-        bot.sendMessage(id, {
-          text: welcomeMessage,
-          mentions: [user]
-        });
+          await bot.sendMessage(id, {
+            text: welcomeMessage,
+            mentions: [user]
+          });
 
-      } else if (action === "remove") {
-        // Ketika ada anggota yang keluar atau dikeluarkan
-        const goodbyeMessage = `👋 Selamat tinggal @${userJid}. Sampai jumpa lagi di lain waktu!`;
+        } else if (action === "remove") {
+          const goodbyeMessage = `👋 Selamat tinggal @${userJid}. Sampai jumpa lagi di lain waktu!`;
 
-        // Kirim pesan perpisahan ke grup dengan mention
-        bot.sendMessage(id, {
-          text: goodbyeMessage,
-          mentions: [user]
-        });
+          await bot.sendMessage(id, {
+            text: goodbyeMessage,
+            mentions: [user]
+          });
+        }
       }
+    } catch (error) {
+      console.error("❌ Error pada group participants update:", error);
     }
   });
 }
