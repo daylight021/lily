@@ -10,6 +10,33 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 // Global session storage untuk menyimpan URL terakhir setiap user
 global.ytSessions = global.ytSessions || {};
 
+// Helper function untuk format durasi
+function formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } else {
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+}
+
+// Helper function untuk format angka
+function formatNumber(num) {
+    if (!num) return 'N/A';
+    const number = parseInt(num);
+    if (number >= 1000000000) {
+        return (number / 1000000000).toFixed(1) + 'B';
+    } else if (number >= 1000000) {
+        return (number / 1000000).toFixed(1) + 'M';
+    } else if (number >= 1000) {
+        return (number / 1000).toFixed(1) + 'K';
+    }
+    return number.toLocaleString('id-ID');
+}
+
 async function getYtInfo(url) {
     const info = await ytdl.getInfo(url);
     const videoFormats = ytdl.filterFormats(info.formats, 'videoonly').filter(f => f.container === 'mp4');
@@ -48,7 +75,11 @@ async function downloadVideo(msg, bot, url, quality, usedPrefix, command) {
 
         const bestAudio = audioFormats.sort((a, b) => b.audioBitrate - a.audioBitrate)[0];
 
-        await msg.reply(`✅ Mengunduh video *(${quality})* dan audio... Ini mungkin memakan waktu.`);
+        await msg.reply(`✅ Memulai download video...\n\n` +
+                      `🎬 *${videoTitle}*\n` +
+                      `📊 *Kualitas:* ${quality}\n` +
+                      `⏱️ *Durasi:* ${formatDuration(parseInt(info.videoDetails.lengthSeconds || 0))}\n\n` +
+                      `⏳ Sedang mengunduh dan memproses... Ini mungkin memakan waktu. (Bisa sampai 3 - 5 menit atau bahkan lebih) Mohon tunggu😊`);
 
         const timestamp = Date.now();
         const videoPath = path.join(TEMP_DIR, `video_${timestamp}.mp4`);
@@ -69,7 +100,13 @@ async function downloadVideo(msg, bot, url, quality, usedPrefix, command) {
         await bot.sendMessage(msg.from, {
             video: fs.readFileSync(outputPath),
             mimetype: 'video/mp4',
-            caption: `✅ Video berhasil diunduh:\n*${videoTitle}*\nKualitas: ${quality}`
+            caption: `✅ *Download berhasil!*\n\n` +
+                    `🎬 *${videoTitle}*\n` +
+                    `📺 *Channel:* ${info.videoDetails.author?.name || 'N/A'}\n` +
+                    `📊 *Kualitas:* ${quality}\n` +
+                    `📁 *Ukuran File:* ${(fs.statSync(outputPath).size / (1024 * 1024)).toFixed(2)} MB\n` +
+                    `⏱️ *Durasi:* ${formatDuration(parseInt(info.videoDetails.lengthSeconds || 0))}\n\n` +
+                    `🔗 *Link:* ${url}`
         }, { quoted: msg });
 
         await msg.react("✅");
@@ -136,6 +173,18 @@ module.exports = {
             return msg.reply("Tidak ada pilihan kualitas video yang tersedia untuk link ini.");
         }
 
+        // Ambil informasi video detail
+        const videoDetails = info.videoDetails;
+        const viewCount = formatNumber(videoDetails.viewCount);
+        const likes = formatNumber(videoDetails.likes);
+        const duration = videoDetails.lengthSeconds ? formatDuration(parseInt(videoDetails.lengthSeconds)) : 'N/A';
+        const uploadDate = videoDetails.publishDate || 'N/A';
+        const channel = videoDetails.author?.name || videoDetails.ownerChannelName || 'N/A';
+        const description = videoDetails.description ? 
+            (videoDetails.description.length > 100 ? 
+                videoDetails.description.substring(0, 100) + '...' : 
+                videoDetails.description) : 'N/A';
+        
         // Simpan URL di session untuk user ini
         if (!global.ytSessions) global.ytSessions = {};
         global.ytSessions[msg.sender] = {
@@ -151,8 +200,15 @@ module.exports = {
         }));
 
         const buttonMessage = {
-            caption: `*${videoTitle}*\n\nSilakan pilih salah satu kualitas video di bawah ini:\n\nTekan tombol untuk mengunduh`,
-            footer: 'Tekan tombol untuk mengunduh',
+            caption: `🎬 *${videoTitle}*\n\n` +
+                    `📺 *Channel:* ${channel}\n` +
+                    `👀 *Views:* ${viewCount}\n` +
+                    `👍 *Likes:* ${likes}\n` +
+                    `⏱️ *Duration:* ${duration}\n` +
+                    `📅 *Published:* ${uploadDate}\n\n` +
+                    `📄 *Description:*\n${description}\n\n` +
+                    `📥 *Pilih kualitas video untuk download:*`,
+            footer: 'Powered by YouTube Downloader Bot',
             buttons: buttons,
             image: { url: thumbnailUrl },
             headerType: 4
