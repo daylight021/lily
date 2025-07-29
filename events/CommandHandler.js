@@ -37,6 +37,65 @@ module.exports = {
       const botPrefix = new RegExp("^[" + "/!#$%+£¢€¥^°=¶∆×÷π√✓©®:;?&.\\-".replace(/[|\\{}()[\]^$+*?.\-\^]/g, "\\$&") + "]");
       const isCommand = msg.text && botPrefix.test(msg.text);
 
+      // ========== HANDLER UNTUK BUTTON RESPONSE YOUTUBE ==========
+      if (msg.text && msg.text.startsWith("Download ") && msg.text.match(/Download (1080p|720p|480p|360p|240p|144p)/)) {
+        // Cek apakah user memiliki session YouTube yang aktif
+        if (global.ytSessions && global.ytSessions[msg.sender]) {
+          try {
+            // Ambil command ytmp4
+            const ytmp4Command = this.commands.get('ytmp4');
+            if (ytmp4Command) {
+              // Buat args dengan format button response
+              const fakeArgs = [msg.text];
+              
+              // Execute ytmp4 command dengan button response
+              const extra = { 
+                bot: this, 
+                usedPrefix: '/', // Default prefix
+                participants: [], 
+                groupMetadata: null, 
+                args: fakeArgs, 
+                command: 'ytmp4' 
+              };
+              
+              return await ytmp4Command.execute.call(this, msg, extra);
+            }
+          } catch (error) {
+            console.error('Error handling YouTube button response:', error);
+            return msg.reply("❌ Terjadi kesalahan saat memproses pilihan kualitas.");
+          }
+        } else {
+          return msg.reply("❌ Session expired. Silakan kirim ulang URL YouTube.");
+        }
+      }
+
+      // ========== HANDLER UNTUK BUTTON RESPONSE LAINNYA ==========
+      if (msg.text && msg.text.startsWith("Download Audio ") && msg.text.match(/Download Audio (128kbps|192kbps|256kbps|320kbps)/)) {
+        if (global.ytmp3Sessions && global.ytmp3Sessions[msg.sender]) {
+          try {
+            const ytmp3Command = this.commands.get('ytmp3');
+            if (ytmp3Command) {
+              const fakeArgs = [msg.text]; // "Download Audio 320kbps"
+              const extra = { 
+                bot: this, 
+                usedPrefix: '/', 
+                participants: [], 
+                groupMetadata: null, 
+                args: fakeArgs, 
+                command: 'ytmp3' 
+              };
+              return await ytmp3Command.execute.call(this, msg, extra);
+            }
+          } catch (error) {
+            console.error('Error handling ytmp3 button response:', error);
+            return msg.reply("❌ Terjadi kesalahan saat memproses pilihan kualitas audio.");
+          }
+        } else {
+          return msg.reply("❌ Session expired. Silakan kirim ulang URL YouTube.");
+        }
+      }
+
+      // ========== SPAM CHECK ==========
       if (isCommand) {
           if (isUserSpamming(msg.sender)) {
               if (userSpamData.get(msg.sender).count === SPAM_LIMIT) {
@@ -68,6 +127,7 @@ module.exports = {
       let isAdmin = user.admin === "admin" || user.admin === "superadmin";
       let isBotAdmin = bot.admin === "admin" || bot.admin === "superadmin";
 
+      // ========== COMMAND PROCESSING ==========
       if (isCommand) {
         const usedPrefix = msg.text.match(botPrefix)[0];
         const args = msg.text.slice(usedPrefix.length).trim().split(/ +/);
