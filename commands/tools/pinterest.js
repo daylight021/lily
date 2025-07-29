@@ -17,25 +17,30 @@ module.exports = {
     name: "pin",
     description: "Mencari gambar di Pinterest.",
     aliases: ["pinterest"],
-    async execute(message, args) {
-        // Langsung gunakan 'args' sebagai query karena bukan array
-        const query = args;
+    /**
+     * @param {import('whatsapp-web.js').Message} message
+     * @param {object} options
+     * @param {string} options.args - String argumen dari perintah
+     */
+    async execute(message, options) {
+        // Ambil string argumen dari objek 'options'
+        const query = options.args;
 
         if (!query || query.trim().length === 0) {
             return message.reply("Silakan berikan query pencarian. Contoh: .pin naruto");
         }
 
         try {
+            await message.react("⏳");
             const results = await searchPinterest(query);
             const randomImageUrl = results[Math.floor(Math.random() * results.length)];
             
-            // Baris ini mungkin perlu disesuaikan dengan pustaka WhatsApp (baileys, etc.) yang Anda gunakan.
-            // Kode ini mengasumsikan bot dapat mengirim gambar dari URL.
-            await message.reply({ image: { url: randomImageUrl } });
+            await message.reply({ image: { url: randomImageUrl }, caption: `*Hasil pencarian untuk:* ${query}` });
+            await message.react("✅");
 
         } catch (error) {
             console.error("Error saat menjalankan perintah 'pin':", error);
-            // Mengirim pesan galat yang lebih spesifik ke pengguna
+            await message.react("❌");
             message.reply(error.message || "Terjadi kesalahan saat mencari gambar di Pinterest.");
         }
     },
