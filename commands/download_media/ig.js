@@ -1,44 +1,35 @@
-const axios = require("axios");
-const cheerio = require("cheerio");
+const axios = require('axios');
 
-// Fallback ke yt1s.io dengan logika scraping yang lebih cerdas
+/**
+ * =================================================================
+ * FUNGSI IG Downloader BARU (API Method)
+ * =================================================================
+ * Menggunakan API publik yang mengembalikan data JSON, lebih stabil
+ * daripada scraping HTML.
+ */
 async function instagramDl(url) {
     try {
-        const { data } = await axios.post('https://yt1s.io/api/ajaxSearch', new URLSearchParams({ q: url, vt: 'ig' }), {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-                'Referer': 'https://yt1s.io/'
-            }
-        });
+        // Menggunakan API dari i-downloader.com
+        const response = await axios.get(`https://api.i-downloader.com/api/media?url=${encodeURIComponent(url)}`);
 
-        const $ = cheerio.load(data.data);
-        const result = new Set(); // Menggunakan Set untuk menghindari duplikasi URL
-
-        // Iterasi setiap container media untuk mengambil link utama saja
-        $('div.dl-item').each((i, element) => {
-            // Cari link download video (.mp4) terlebih dahulu
-            let mediaUrl = $(element).find('a[href*=".mp4"]').attr('href');
-            
-            // Jika tidak ada video, baru cari link gambar
-            if (!mediaUrl) {
-                mediaUrl = $(element).find('a[href*=".jpg"]').attr('href');
-            }
-
-            if (mediaUrl) {
-                result.add(mediaUrl);
-            }
-        });
-
-        if (result.size === 0) {
-            throw new Error("Tidak ada link unduhan yang ditemukan dalam respons API.");
+        const data = response.data;
+        if (!data.data || data.data.length === 0) {
+            throw new Error('API tidak mengembalikan media atau URL tidak valid.');
         }
 
-        return Array.from(result);
+        // Ekstrak semua URL media dari respons JSON
+        const mediaUrls = data.data.map(item => item.url);
+
+        if (mediaUrls.length === 0) {
+            throw new Error("Tidak ada media yang dapat diunduh ditemukan.");
+        }
+
+        return mediaUrls;
 
     } catch (e) {
-        const errorMessage = e.response ? e.response.data : e.message;
-        throw new Error(`Gagal saat scraping dari yt1s.io: ${errorMessage}`);
+        // Cek jika error berasal dari axios atau logika kita
+        const errorMessage = e.response ? e.response.data?.message : e.message;
+        throw new Error(`API i-downloader gagal: ${errorMessage || 'Kesalahan tidak diketahui'}`);
     }
 }
 
@@ -62,6 +53,7 @@ module.exports = {
 
       await msg.reply(`✅ Berhasil mendapatkan ${mediaUrls.length} media. Mengirim...`);
       
+      // Impor file-type secara dinamis
       const { fileTypeFromBuffer } = await import('file-type');
 
       for (const [index, mediaUrl] of mediaUrls.entries()) {
@@ -74,9 +66,9 @@ module.exports = {
             const mime = type ? type.mime : 'application/octet-stream';
             
             if (mime.startsWith('video/')) {
-                 await bot.sendMessage(msg.from, { video: buffer, caption }, { quoted: msg });
+                 await bot.sendMessage(msg.from, { video: buffer, caption, mimetype: 'video/mp4' }, { quoted: msg });
             } else if (mime.startsWith('image/')) {
-                 await bot.sendMessage(msg.from, { image: buffer, caption }, { quoted: msg });
+                 await bot.sendMessage(msg.from, { image: buffer, caption, mimetype: 'image/jpeg' }, { quoted: msg });
             }
             
         } catch (sendError) {
