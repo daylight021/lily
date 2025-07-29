@@ -265,6 +265,9 @@ Contoh: \`${usedPrefix + command} aesthetic wallpaper\`
 • \`-v\`: Cari video
   Contoh: \`${usedPrefix + command} cooking -v\`
 
+• \`-hd\`: Kirim gambar kualitas HD (sebagai dokumen)
+  Contoh: \`${usedPrefix + command} wallpaper -hd\`
+
 *Tips untuk hasil terbaik:*
 • Gunakan kata kunci bahasa Inggris
 • Semakin spesifik, semakin baik hasilnya`;
@@ -275,6 +278,7 @@ Contoh: \`${usedPrefix + command} aesthetic wallpaper\`
     let query = [];
     let count = 1;
     let searchVideos = false;
+    let hdMode = false; // Mode HD (kirim sebagai dokumen)
 
     // Parse arguments
     for (let i = 0; i < args.length; i++) {
@@ -284,6 +288,8 @@ Contoh: \`${usedPrefix + command} aesthetic wallpaper\`
         i++;
       } else if (args[i].toLowerCase() === '-v') {
         searchVideos = true;
+      } else if (args[i].toLowerCase() === '-hd') {
+        hdMode = true;
       } else {
         query.push(args[i]);
       }
@@ -320,11 +326,48 @@ Contoh: \`${usedPrefix + command} aesthetic wallpaper\`
             const caption = count > 1 ? 
               `📌 *${searchQuery}* (${i + 1}/${count})\n🔍 Pencarian: ${searchTime}s` : 
               `📌 Hasil pencarian: *${searchQuery}*\n🔍 Waktu: ${searchTime}s`;
-              
-            await bot.sendMessage(msg.from, { 
-              image: { url: item }, 
-              caption 
-            }, { quoted: msg });
+            
+            if (hdMode) {
+              // Mode HD: Kirim sebagai dokumen untuk kualitas penuh
+              try {
+                const response = await axios.head(item, { timeout: 5000 });
+                const contentLength = parseInt(response.headers['content-length'] || '0');
+                const fileSize = (contentLength / (1024 * 1024)).toFixed(2); // MB
+                
+                // Cek ukuran file (maksimal 64MB untuk dokumen WA)
+                if (contentLength < 64 * 1024 * 1024) {
+                  await bot.sendMessage(msg.from, {
+                    document: { url: item },
+                    fileName: `Pinterest_${searchQuery.replace(/[^a-zA-Z0-9]/g, '_')}_HD_${Date.now()}.jpg`,
+                    mimetype: 'image/jpeg',
+                    caption: caption + `\n\n🎯 *Mode HD* (${fileSize}MB)\n💡 Buka sebagai file untuk kualitas penuh`
+                  }, { quoted: msg });
+                } else {
+                  // File terlalu besar, kirim sebagai gambar biasa
+                  await bot.sendMessage(msg.from, { 
+                    image: { url: item }, 
+                    caption: caption + '\n\n⚠️ File terlalu besar untuk mode HD',
+                    viewOnce: false
+                  }, { quoted: msg });
+                }
+              } catch (headError) {
+                console.log('⚠️ Gagal cek ukuran file, menggunakan mode dokumen...');
+                await bot.sendMessage(msg.from, {
+                  document: { url: item },
+                  fileName: `Pinterest_${searchQuery.replace(/[^a-zA-Z0-9]/g, '_')}_HD_${Date.now()}.jpg`,
+                  mimetype: 'image/jpeg',
+                  caption: caption + '\n\n🎯 *Mode HD*\n💡 Buka sebagai file untuk kualitas penuh'
+                }, { quoted: msg });
+              }
+            } else {
+              // Mode normal: Kirim sebagai gambar dengan optimasi
+              await bot.sendMessage(msg.from, { 
+                image: { url: item }, 
+                caption,
+                viewOnce: false,
+                jpegQuality: 95 // Kualitas tinggi tapi tidak maksimal (untuk kecepatan)
+              }, { quoted: msg });
+            }
             
           } else if (searchType === 'video') {
             const downloadMsg = await msg.reply(`📥 Mengunduh video ${i + 1}/${count} dari Pinterest...\n⏳ Mohon tunggu sebentar...`);
