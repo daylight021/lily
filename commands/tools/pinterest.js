@@ -3,25 +3,32 @@ const fs = require('fs-extra');
 const path = require('path');
 const axios = require('axios');
 
-// --- FUNGSI HELPER ---
+// --- FUNGSI HELPER YANG DIOPTIMALKAN ---
 
-// Fungsi untuk scroll halaman
-async function autoScroll(page) {
-  await page.evaluate(async () => {
+// Scroll yang lebih efisien dan cepat
+async function smartScroll(page, maxScrolls = 3) {
+  await page.evaluate(async (maxScrolls) => {
     await new Promise(resolve => {
-      let totalHeight = 0;
-      const distance = 200;
-      const scrollMax = 5000;
+      let scrollCount = 0;
+      const distance = 1000; // Scroll lebih besar per step
       const timer = setInterval(() => {
+        const scrollHeight = document.body.scrollHeight;
+        const currentScroll = window.pageYOffset + window.innerHeight;
+        
         window.scrollBy(0, distance);
-        totalHeight += distance;
-        if (totalHeight >= scrollMax) {
+        scrollCount++;
+        
+        // Stop jika sudah mencapai bottom atau max scroll
+        if (currentScroll >= scrollHeight || scrollCount >= maxScrolls) {
           clearInterval(timer);
           resolve();
         }
-      }, 100);
+      }, 800); // Interval lebih lama untuk loading
     });
-  });
+  }, maxScrolls);
+  
+  // Wait for images to load
+  await page.waitForTimeout(2000);
 }
 
 // Fungsi untuk mengacak array
@@ -33,21 +40,28 @@ function shuffleArray(array) {
     return array;
 }
 
-// --- FUNGSI UTAMA SCRAPING & DOWNLOAD ---
+// Fungsi untuk mendapatkan URL resolusi tinggi
+function getHighResUrl(url) {
+  // Pinterest image URL patterns:
+  // 236x = small, 474x = medium, 736x = large, originals = highest
+  return url
+    .replace(/\/\d+x\d*\//, '/originals/') // Coba original dulu
+    .replace(/236x/g, '736x') // Fallback ke 736x
+    .replace(/474x/g, '736x'); // Upgrade 474x ke 736x
+}
 
-// Fungsi untuk mendapatkan link dari Pinterest
+// --- FUNGSI UTAMA SCRAPING YANG DIOPTIMALKAN ---
+
 async function getPinterestLinks(keyword, type = 'image') {
   let browser;
   try {
-    // --- PERBAIKAN PUPPETEER ---
-    // Menentukan path ke executable chromium yang sudah di-install
     const executablePath = fs.existsSync('/usr/bin/chromium-browser') 
       ? '/usr/bin/chromium-browser' 
       : undefined;
 
     browser = await puppeteer.launch({
       headless: true,
-      executablePath, // Menggunakan browser dari sistem
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -56,81 +70,194 @@ async function getPinterestLinks(keyword, type = 'image') {
         '--no-first-run',
         '--no-zygote',
         '--single-process',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-web-security', // Tambahan untuk akses gambar
+        '--disable-images=false' // Pastikan gambar dimuat
       ]
     });
 
     const page = await browser.newPage();
+    
+    // Set viewport yang lebih besar untuk mendapatkan lebih banyak konten
+    await page.setViewport({ width: 1920, height: 1080 });
+    
     const query = encodeURIComponent(keyword);
     const url = `https://id.pinterest.com/search/pins/?q=${query}`;
 
     await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
-    await page.goto(url, { waitUntil: 'networkidle2' });
-    await autoScroll(page);
+
+    console.log(`🔍 Mengakses: ${url}`);
+    await page.goto(url, { 
+      waitUntil: 'networkidle0', // Wait sampai network idle
+      timeout: 30000 
+    });
+
+    // Wait for Pinterest to load properly
+    try {
+      await page.waitForSelector('[data-test-id="pin"]', { timeout: 10000 });
+    } catch (e) {
+      console.log('Selector utama tidak ditemukan, mencoba alternatif...');
+    }
+
+    // Smart scroll - hanya 2-3 kali scroll untuk mendapatkan ~20-30 gambar
+    await smartScroll(page, 2);
 
     let results = [];
+    
     if (type === 'image') {
       results = await page.evaluate(() => {
-        const images = Array.from(document.querySelectorAll('img[src*="i.pinimg.com"]'));
-        const imageUrls = images.map(img => img.src.replace(/236x/, '736x'));
+        // Selector yang lebih spesifik untuk mendapatkan gambar berkualitas
+        const selectors = [
+          'img[src*="i.pinimg.com"]',
+          '[data-test-id="pin"] img',
+          '.pinWrapper img',
+          '.Pj7 img' // Pinterest class
+        ];
+        
+        let allImages = [];
+        
+        // Coba semua selector
+        selectors.forEach(selector => {
+          const images = document.querySelectorAll(selector);
+          allImages.push(...Array.from(images));
+        });
+        
+        // Filter dan process URLs
+        const imageUrls = allImages
+          .map(img => img.src || img.dataset.src || img.getAttribute('src'))
+          .filter(src => src && src.includes('i.pinimg.com'))
+          .filter(src => !src.includes('avatar')) // Skip avatars
+          .map(src => {
+            // Upgrade ke resolusi tertinggi
+            return src
+              .replace(/\/\d+x\d*\//, '/originals/')
+              .replace(/236x/g, '736x')
+              .replace(/474x/g, '736x');
+          });
+        
+        // Remove duplicates dan return
         return [...new Set(imageUrls)];
       });
+      
+      console.log(`✅ Ditemukan ${results.length} gambar`);
+      
     } else if (type === 'video') {
       results = await page.evaluate(() => {
-        const anchors = Array.from(document.querySelectorAll('a[href*="/pin/"]'));
-        return [...new Set(anchors.map(a => a.href))];
+        const selectors = [
+          'a[href*="/pin/"][data-test-id="pin"]',
+          'a[href*="/pin/"]',
+          '[data-test-id="pin"] a'
+        ];
+        
+        let allLinks = [];
+        selectors.forEach(selector => {
+          const links = document.querySelectorAll(selector);
+          allLinks.push(...Array.from(links));
+        });
+        
+        const pinUrls = allLinks
+          .map(a => a.href)
+          .filter(href => href && href.includes('/pin/'))
+          .map(href => href.split('?')[0]); // Remove query params
+        
+        return [...new Set(pinUrls)];
       });
+      
+      console.log(`✅ Ditemukan ${results.length} pin video`);
     }
     
     await browser.close();
     return results;
 
   } catch (error) {
-    console.error("Error saat scraping dengan Puppeteer:", error);
+    console.error("❌ Error saat scraping:", error.message);
     if (browser) await browser.close();
     return [];
   }
 }
 
-// Fungsi untuk mengunduh video via Pintodown (dari kode Anda)
+// Fungsi download video yang lebih robust
 async function downloadViaPintodown(pinUrl) {
   let browser;
   try {
-    const executablePath = fs.existsSync('/usr/bin/chromium-browser') ? '/usr/bin/chromium-browser' : undefined;
-    browser = await puppeteer.launch({ headless: true, executablePath, args: ['--no-sandbox'] });
-    const page = await browser.newPage();
+    const executablePath = fs.existsSync('/usr/bin/chromium-browser') 
+      ? '/usr/bin/chromium-browser' 
+      : undefined;
+      
+    browser = await puppeteer.launch({ 
+      headless: true, 
+      executablePath, 
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox'
+      ]
+    });
     
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    
+    console.log(`📥 Mengunduh video dari: ${pinUrl}`);
     await page.goto('https://pintodown.com/', { waitUntil: 'domcontentloaded' });
 
+    // Clear input dan masukkan URL
+    await page.click('#pinterest_video_url');
+    await page.keyboard.selectAll();
     await page.type('#pinterest_video_url', pinUrl);
+    
     await page.click('button.pinterest__button--download');
 
-    // Menunggu link download muncul
-    await page.waitForSelector('a[href$=".mp4"]', { timeout: 15000 });
-    const videoUrl = await page.evaluate(() => document.querySelector('a[href$=".mp4"]').href);
+    // Wait untuk link download dengan timeout lebih panjang
+    await page.waitForSelector('a[href$=".mp4"], a[href*=".mp4"]', { timeout: 20000 });
+    
+    const videoUrl = await page.evaluate(() => {
+      const link = document.querySelector('a[href$=".mp4"], a[href*=".mp4"]');
+      return link ? link.href : null;
+    });
 
     await browser.close();
-    return videoUrl; // Mengembalikan URL video untuk dikirim
+    return videoUrl;
 
   } catch (err) {
-    console.error(`❌ Gagal unduh video dari ${pinUrl}: ${err.message}`);
+    console.error(`❌ Gagal unduh video: ${err.message}`);
     if (browser) await browser.close();
-    return null; // Mengembalikan null jika gagal
+    return null;
   }
 }
 
-// --- LOGIKA UTAMA PERINTAH BOT ---
+// Fungsi sleep
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
+// --- MODUL UTAMA ---
 module.exports = {
   name: "pin",
   alias: ["pinterest"],
-  description: "Mencari gambar atau video dari Pinterest.",
+  description: "Mencari gambar atau video dari Pinterest dengan kualitas tinggi.",
   category: "tools",
   execute: async (msg, { bot, args, usedPrefix, command }) => {
     if (!args.length) {
-      const helpMessage = `*Pencarian Pinterest* 🔎\n\nFitur ini digunakan untuk mencari media dari Pinterest.\n\n*Cara Penggunaan:*\n\`${usedPrefix + command} <query>\`\nContoh: \`${usedPrefix + command} cyberpunk city\`\n\n*Opsi Tambahan:*\n- \`-j <jumlah>\`: Untuk mengirim beberapa hasil sekaligus (maksimal 5).\n  Contoh: \`${usedPrefix + command} cat -j 3\`\n\n- \`-v\`: Untuk mencari video.\n  Contoh: \`${usedPrefix + command} nature timelapse -v\``;
+      const helpMessage = `*📌 Pinterest Search* 
+
+Mencari media berkualitas tinggi dari Pinterest.
+
+*Penggunaan:*
+\`${usedPrefix + command} <query>\`
+Contoh: \`${usedPrefix + command} aesthetic wallpaper\`
+
+*Opsi:*
+• \`-j <jumlah>\`: Kirim beberapa hasil (maks 5)
+  Contoh: \`${usedPrefix + command} cat -j 3\`
+
+• \`-v\`: Cari video
+  Contoh: \`${usedPrefix + command} cooking -v\`
+
+*Tips untuk hasil terbaik:*
+• Gunakan kata kunci bahasa Inggris
+• Semakin spesifik, semakin baik hasilnya`;
+      
       return bot.sendMessage(msg.from, { text: helpMessage }, { quoted: msg });
     }
 
@@ -138,10 +265,11 @@ module.exports = {
     let count = 1;
     let searchVideos = false;
 
+    // Parse arguments
     for (let i = 0; i < args.length; i++) {
       if (args[i].toLowerCase() === '-j') {
         count = parseInt(args[i + 1], 10) || 1;
-        count = Math.min(Math.max(1, count), 5); // Batasi antara 1 dan 5
+        count = Math.min(Math.max(1, count), 5);
         i++;
       } else if (args[i].toLowerCase() === '-v') {
         searchVideos = true;
@@ -149,43 +277,76 @@ module.exports = {
         query.push(args[i]);
       }
     }
+    
     const searchQuery = query.join(' ');
-    if (!searchQuery) return msg.reply("Mohon masukkan query pencarian.");
+    if (!searchQuery) return msg.reply("❌ Mohon masukkan query pencarian.");
 
     try {
-      await msg.react("⏳");
-      const searchType = searchVideos ? 'video' : 'image';
+      await msg.react("🔍");
+      console.log(`🚀 Memulai pencarian: "${searchQuery}" (${searchVideos ? 'video' : 'gambar'})`);
       
+      const startTime = Date.now();
+      const searchType = searchVideos ? 'video' : 'image';
       const results = await getPinterestLinks(searchQuery, searchType);
+      const searchTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
       if (!results || results.length === 0) {
         await msg.react("❌");
-        return msg.reply("Maaf, tidak ada hasil yang ditemukan. Coba dengan kata kunci lain.");
+        return msg.reply(`❌ Tidak ada hasil ditemukan untuk "${searchQuery}". Coba kata kunci lain.`);
       }
+
+      console.log(`⚡ Pencarian selesai dalam ${searchTime}s, ditemukan ${results.length} hasil`);
       
       const itemsToSend = shuffleArray(results).slice(0, count);
+      await msg.react("📤");
 
-      for (const item of itemsToSend) {
-        if (searchType === 'image') {
-          await bot.sendMessage(msg.from, { image: { url: item }, caption: `Hasil pencarian untuk: *${searchQuery}*` }, { quoted: msg });
-        } else if (searchType === 'video') {
-            msg.reply(`Mencoba mengunduh video dari: ${item}\nMohon tunggu sebentar...`);
+      // Kirim hasil
+      for (let i = 0; i < itemsToSend.length; i++) {
+        const item = itemsToSend[i];
+        
+        try {
+          if (searchType === 'image') {
+            const caption = count > 1 ? 
+              `📌 *${searchQuery}* (${i + 1}/${count})\n🔍 Pencarian: ${searchTime}s` : 
+              `📌 Hasil pencarian: *${searchQuery}*\n🔍 Waktu: ${searchTime}s`;
+              
+            await bot.sendMessage(msg.from, { 
+              image: { url: item }, 
+              caption 
+            }, { quoted: msg });
+            
+          } else if (searchType === 'video') {
+            const downloadMsg = await msg.reply(`📥 Mengunduh video ${i + 1}/${count} dari Pinterest...\n⏳ Mohon tunggu sebentar...`);
+            
             const videoUrl = await downloadViaPintodown(item);
             if (videoUrl) {
-                await bot.sendMessage(msg.from, { video: { url: videoUrl }, caption: `Video *${searchQuery}* berhasil diunduh.` }, { quoted: msg });
+              await bot.sendMessage(msg.from, { 
+                video: { url: videoUrl }, 
+                caption: `🎥 Video *${searchQuery}* (${i + 1}/${count})` 
+              }, { quoted: msg });
             } else {
-                msg.reply(`Gagal mengunduh video dari link tersebut.`);
+              await msg.reply(`❌ Gagal mengunduh video ${i + 1}/${count}. Mencoba yang lain...`);
             }
+          }
+          
+          // Jeda antar pengiriman
+          if (i < itemsToSend.length - 1) {
+            await sleep(1000);
+          }
+          
+        } catch (sendError) {
+          console.error(`❌ Error mengirim item ${i + 1}:`, sendError.message);
+          await msg.reply(`❌ Gagal mengirim hasil ${i + 1}/${count}`);
         }
-        await sleep(1500); // Jeda antar kiriman
       }
 
       await msg.react("✅");
+      console.log(`✅ Selesai mengirim ${itemsToSend.length} hasil untuk "${searchQuery}"`);
 
     } catch (error) {
-      console.error("Error pada perintah Pinterest:", error);
+      console.error("❌ Error pada Pinterest command:", error);
       await msg.react("❌");
-      msg.reply("Terjadi kesalahan saat memproses permintaan Anda.");
+      msg.reply("❌ Terjadi kesalahan saat memproses permintaan. Silakan coba lagi.");
     }
   },
 };
