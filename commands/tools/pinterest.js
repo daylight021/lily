@@ -1,4 +1,4 @@
-import { pinterest } from "@xct007/frieren-scraper";
+const { pinterest } = require("@xct007/frieren-scraper");
 
 async function searchPinterest(query) {
     try {
@@ -13,7 +13,7 @@ async function searchPinterest(query) {
     }
 }
 
-export default {
+module.exports = {
     name: "pin",
     description: "Mencari gambar di Pinterest.",
     aliases: ["pinterest"],
@@ -25,8 +25,15 @@ export default {
 
         try {
             const results = await searchPinterest(query);
-            const randomImage = results[Math.floor(Math.random() * results.length)];
-            await message.reply(randomImage);
+            // Ambil gambar secara acak dari hasil
+            const randomImageUrl = results[Math.floor(Math.random() * results.length)];
+            
+            // Kirim gambar sebagai balasan
+            // Pastikan bot Anda memiliki metode untuk mengirim media dari URL. 
+            // Biasanya menggunakan `client.sendMessage` dengan media atau metode serupa.
+            // Asumsi metode `reply` bisa mengirim URL gambar, jika tidak sesuaikan dengan bot Anda.
+            await message.reply({ image: { url: randomImageUrl } });
+
         } catch (error) {
             console.error("Error pada perintah Pinterest:", error);
             message.reply("Terjadi kesalahan saat mencari gambar di Pinterest.");
