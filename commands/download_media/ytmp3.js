@@ -1,6 +1,5 @@
 const ytdl = require('@distube/ytdl-core');
 const axios = require('axios');
-const { formatNumber, formatDuration} = require('ytmp4')
 
 // Fungsi ini diadaptasi dari screaper.js
 async function getYtAudio(url) {
@@ -22,6 +21,33 @@ async function getYtAudio(url) {
     };
 }
 
+// Helper function untuk format durasi
+function formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } else {
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+}
+
+// Helper function untuk format angka
+function formatNumber(num) {
+    if (!num) return 'N/A';
+    const number = parseInt(num);
+    if (number >= 1000000000) {
+        return (number / 1000000000).toFixed(1) + 'B';
+    } else if (number >= 1000000) {
+        return (number / 1000000).toFixed(1) + 'M';
+    } else if (number >= 1000) {
+        return (number / 1000).toFixed(1) + 'K';
+    }
+    return number.toLocaleString('id-ID');
+}
+
 module.exports = {
   name: "ytmp3",
   alias: ["yta"],
@@ -36,7 +62,7 @@ module.exports = {
     await msg.reply('Audio sedang diproses... Mohon tunggu 😊');
 
     try {
-      const audioInfo = await getYtAudio(url);
+      const info = await getYtAudio(url);
       const videoDetails = info.videoDetails;
       const viewCount = formatNumber(videoDetails.viewCount);
       const videoTitle = info.videoDetails.title;
@@ -44,7 +70,7 @@ module.exports = {
       const uploadDate = videoDetails.publishDate || 'N/A';
 
       // Unduh ke buffer untuk stabilitas
-      const buffer = await axios.get(audioInfo.url, { responseType: 'arraybuffer' });
+      const buffer = await axios.get(info.url, { responseType: 'arraybuffer' });
 
       await bot.sendMessage(msg.from, { 
           audio: buffer.data, 
