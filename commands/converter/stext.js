@@ -2,14 +2,27 @@ const { createCanvas, registerFont } = require('canvas');
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
 const path = require('path');
 
-const fontPath = path.join(__dirname, '..', '..', 'lib', 'fonts', 'NotoColorEmoji.ttf');
-registerFont(fontPath, { family: 'Noto Color Emoji' });
+// Mendaftarkan font emoji berwarna
+try {
+    const fontPath = path.join(__dirname, '..', '..', 'lib', 'fonts', 'NotoColorEmoji.ttf');
+    // Pastikan file font ada sebelum mendaftarkannya
+    if (require('fs').existsSync(fontPath)) {
+        registerFont(fontPath, { family: 'Noto Color Emoji' });
+    } else {
+        console.warn(`[stext] Peringatan: Font NotoColorEmoji.ttf tidak ditemukan di ${fontPath}. Emoji mungkin tidak berwarna.`);
+    }
+} catch (e) {
+    console.error('[stext] Gagal mendaftarkan font emoji:', e);
+}
 
 
-// Fungsi untuk memformat teks agar pas di stiker
+// Fungsi untuk memformat teks (dibuat lebih aman)
 function formatText(text) {
-    const words = text.split(' ');
-    if (words.length > 0 && words.length <= 3) return [text];
+    // Pastikan input selalu string sebelum di-split
+    const safeText = String(text); 
+    const words = safeText.split(' ');
+    if (words.length > 0 && words.length <= 3) return [safeText];
+    
     const lines = [];
     let currentLine = [];
     for (let i = 0; i < words.length; i++) {
@@ -23,14 +36,14 @@ function formatText(text) {
     return lines;
 }
 
-// --- MENGGAMBAR TEKS DENGAN FORMAT (*bold*, _italic_, dll) ---
+// Fungsi menggambar teks
 function drawTextWithFormatting(ctx, text, x, y, fontSize, fontFamily) {
-    const parts = text.split(/([*_~])/); // Memisahkan teks berdasarkan karakter format
+    const parts = String(text).split(/([*_~])/);
     let isBold = false;
     let isItalic = false;
 
-    // Hitung total lebar teks untuk penempatan yang benar
     let totalWidth = 0;
+    ctx.font = `${fontSize}px "${fontFamily}"`;
     parts.forEach(part => {
         if (!['*', '_', '~'].includes(part)) {
             const fontStyle = `${isItalic ? 'italic' : ''} ${isBold ? 'bold' : ''} ${fontSize}px "${fontFamily}"`;
@@ -47,26 +60,11 @@ function drawTextWithFormatting(ctx, text, x, y, fontSize, fontFamily) {
     isItalic = false;
 
     parts.forEach(part => {
-        if (part === '*') {
-            isBold = !isBold;
+        if (part === '*' || part === '_' || part === '~') {
+            if (part === '*') isBold = !isBold;
+            if (part === '_') isItalic = !isItalic;
             return;
         }
-        if (part === '_') {
-            isItalic = !isItalic;
-            return;
-        }
-        if (part === '~') {
-            const textWidth = ctx.measureText(parts[i+1] || '').width;
-            ctx.fillText(parts[i+1] || '', currentX, y);
-            ctx.beginPath();
-            ctx.moveTo(currentX - (textWidth / 2), y);
-            ctx.lineTo(currentX + (textWidth / 2), y);
-            ctx.stroke();
-            currentX += textWidth;
-            i++; 
-            return;
-        }
-        
         const fontStyle = `${isItalic ? 'italic' : ''} ${isBold ? 'bold' : ''} ${fontSize}px "${fontFamily}"`;
         ctx.font = fontStyle;
         ctx.fillText(part, currentX, y);
@@ -81,16 +79,25 @@ module.exports = {
     description: "Membuat stiker dari teks dengan dukungan emoji berwarna.",
     aliases: ["stickertxt", "sticktext"],
     async execute(message, options) {
-        const text = options.args;
-        if (!text) return message.reply("Mohon masukkan teks untuk dijadikan stiker. Contoh: .stext Hello World ✨");
+        // --- Langkah Debugging ---
+        // Kita akan log tipe dan isi dari argumen yang diterima
+        console.log(`[stext debug] Tipe dari 'options.args': ${typeof options.args}`);
+        console.log(`[stext debug] Isi dari 'options.args':`, options.args);
+
+        // --- Kode Defensif ---
+        // Secara paksa ubah argumen menjadi string untuk menghindari error.
+        // Jika options.args tidak ada, `String(undefined)` akan menjadi "undefined", jadi kita tangani itu.
+        let text = (options && typeof options.args !== 'undefined' && options.args !== null) ? String(options.args) : "";
+        
+        if (!text || text.trim().length === 0) {
+            return message.reply("Mohon masukkan teks untuk dijadikan stiker. Contoh: .stext Hello World ✨");
+        }
 
         await message.react("⏳");
 
         try {
             const lines = formatText(text);
-            
-            // --- PENGATURAN KANVAS ---
-            const fontFamily = 'Noto Color Emoji'; // Gunakan font yang sudah didaftarkan
+            const fontFamily = 'Noto Color Emoji';
             const fontSize = 60;
             const padding = 20;
 
@@ -98,10 +105,18 @@ module.exports = {
             const tempCtx = tempCanvas.getContext('2d');
             tempCtx.font = `${fontSize}px "${fontFamily}"`;
             
-            const maxWidth = Math.max(...lines.map(line => tempCtx.measureText(line).width));
+            const maxWidth = Math.max(...lines.map(line => {
+                const parts = String(line).split(/([*_~])/);
+                let width = 0;
+                parts.forEach(part => {
+                    if (!['*', '_', '~'].includes(part)) width += tempCtx.measureText(part).width;
+                });
+                return width;
+            }));
+
             const requiredWidth = maxWidth + (padding * 2);
             const requiredHeight = (lines.length * fontSize) + ((lines.length + 1) * padding);
-            const canvasSize = Math.max(requiredWidth, requiredHeight, 512); // Ukuran minimal 512x512
+            const canvasSize = Math.max(requiredWidth, requiredHeight, 512);
             const canvas = createCanvas(canvasSize, canvasSize);
             const ctx = canvas.getContext('2d');
 
