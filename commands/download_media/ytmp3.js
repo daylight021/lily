@@ -49,6 +49,8 @@ function formatNumber(num) {
 async function downloadAudio(msg, bot, url, bitrate, usedPrefix, command) {
     try {
         await msg.react("⏳");
+        console.log(`[YTMP3] Starting download for URL: ${url} with bitrate: ${bitrate}`);
+        
         const { info, audioFormats } = await getYtInfo(url);
         const videoDetails = info.videoDetails;
         const videoTitle = videoDetails.title;
@@ -58,8 +60,10 @@ async function downloadAudio(msg, bot, url, bitrate, usedPrefix, command) {
         if (bitrate) {
             const requestedBitrate = parseInt(bitrate.replace('kbps', ''));
             selectedAudio = audioFormats.find(f => f.audioBitrate >= requestedBitrate) || audioFormats[0];
+            console.log(`[YTMP3] Requested bitrate: ${requestedBitrate}, Selected: ${selectedAudio.audioBitrate}kbps`);
         } else {
             selectedAudio = audioFormats[0]; // Kualitas terbaik
+            console.log(`[YTMP3] Using best quality: ${selectedAudio.audioBitrate}kbps`);
         }
 
         const viewCount = formatNumber(videoDetails.viewCount);
@@ -75,8 +79,18 @@ async function downloadAudio(msg, bot, url, bitrate, usedPrefix, command) {
                         `⏱️ *Durasi:* ${duration}\n\n` +
                         `⏳ Sedang mengunduh dan memproses... Mohon tunggu.`);
 
+        console.log(`[YTMP3] Downloading from URL: ${selectedAudio.url}`);
+        
         // Unduh ke buffer untuk stabilitas
-        const response = await axios.get(selectedAudio.url, { responseType: 'arraybuffer' });
+        const response = await axios.get(selectedAudio.url, { 
+            responseType: 'arraybuffer',
+            timeout: 60000, // 60 detik timeout
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        console.log(`[YTMP3] Download completed, file size: ${(response.data.byteLength / (1024 * 1024)).toFixed(2)} MB`);
 
         await bot.sendMessage(msg.from, { 
             audio: response.data, 
@@ -95,10 +109,12 @@ async function downloadAudio(msg, bot, url, bitrate, usedPrefix, command) {
         }, { quoted: msg });
 
         await msg.react("✅");
+        console.log(`[YTMP3] Audio sent successfully to ${msg.from}`);
 
         // Clear session setelah download selesai
         if (global.ytmp3Sessions && global.ytmp3Sessions[msg.sender]) {
             delete global.ytmp3Sessions[msg.sender];
+            console.log(`[YTMP3] Session cleared for ${msg.sender}`);
         }
 
     } catch (err) {
@@ -116,25 +132,37 @@ module.exports = {
     const input = args[0];
     const bitrate = args[1];
 
+    console.log(`[YTMP3] Execute called with input: "${input}", bitrate: "${bitrate}"`);
+    console.log(`[YTMP3] Args array:`, args);
+
     // Check jika ini adalah response dari button (format: "Download Audio 320kbps", etc.)
     if (input && input.startsWith("Download Audio ") && !bitrate) {
+        console.log(`[YTMP3] Button response detected: "${input}"`);
+        
         const buttonBitrate = input.replace("Download Audio ", "");
+        console.log(`[YTMP3] Extracted bitrate from button: "${buttonBitrate}"`);
+        
         const sessionData = global.ytmp3Sessions && global.ytmp3Sessions[msg.sender];
         
         if (sessionData && sessionData.url) {
+            console.log(`[YTMP3] Found session data for ${msg.sender}: ${sessionData.url}`);
             // Ambil URL dari session dan proses download
             return await downloadAudio(msg, bot, sessionData.url, buttonBitrate, usedPrefix, command);
         } else {
+            console.log(`[YTMP3] No session data found for ${msg.sender}`);
+            console.log(`[YTMP3] Available sessions:`, Object.keys(global.ytmp3Sessions || {}));
             return msg.reply("❌ Session expired. Silakan kirim ulang URL YouTube.");
         }
     }
 
     // Validasi URL normal
     if (!input || !ytdl.validateURL(input)) {
-      return msg.reply("❌ Masukkan URL YouTube yang valid.");
+      console.log(`[YTMP3] Invalid URL provided: "${input}"`);
+      return msg.reply("❌ Masukkan URL YouTube yang valid.\n\nContoh: `.ytmp3 https://youtu.be/dQw4w9WgXcQ`");
     }
 
     const url = input;
+    console.log(`[YTMP3] Processing URL: ${url}`);
 
     try {
         await msg.react("⏳");
@@ -143,15 +171,21 @@ module.exports = {
         const videoTitle = videoDetails.title;
         const thumbnailUrl = videoDetails.thumbnails.slice(-1)[0].url;
 
+        console.log(`[YTMP3] Got video info: "${videoTitle}"`);
+        console.log(`[YTMP3] Available audio formats: ${audioFormats.length}`);
+
         // Jika bitrate sudah dipilih langsung
         if (bitrate) {
+            console.log(`[YTMP3] Direct bitrate specified: ${bitrate}`);
             return await downloadAudio(msg, bot, url, bitrate, usedPrefix, command);
         }
 
         // Tampilkan pilihan bitrate
         const uniqueBitrates = [...new Set(audioFormats.map(f => f.audioBitrate))].filter(Boolean).sort((a, b) => b - a);
+        console.log(`[YTMP3] Available bitrates:`, uniqueBitrates);
+        
         if (uniqueBitrates.length === 0) {
-            return msg.reply("Tidak ada pilihan kualitas audio yang tersedia untuk link ini.");
+            return msg.reply("❌ Tidak ada pilihan kualitas audio yang tersedia untuk link ini.");
         }
 
         // Ambil informasi video detail
@@ -172,12 +206,16 @@ module.exports = {
             timestamp: Date.now()
         };
 
+        console.log(`[YTMP3] Session created for ${msg.sender} with URL: ${url}`);
+
         // Buat button dengan format yang mudah dideteksi
         const buttons = uniqueBitrates.slice(0, 3).map(bitrate => ({
             buttonId: `yt_audio_${bitrate}kbps`,
             buttonText: { displayText: `Download Audio ${bitrate}kbps` },
             type: 1
         }));
+
+        console.log(`[YTMP3] Creating buttons:`, buttons.map(b => b.buttonText.displayText));
 
         const buttonMessage = {
             caption: `🎵 *${videoTitle}*\n\n` +
@@ -195,10 +233,12 @@ module.exports = {
         };
 
         await bot.sendMessage(msg.from, buttonMessage, { quoted: msg });
+        console.log(`[YTMP3] Button message sent successfully`);
         
         // Set timeout untuk menghapus session setelah 5 menit
         setTimeout(() => {
             if (global.ytmp3Sessions && global.ytmp3Sessions[msg.sender] && global.ytmp3Sessions[msg.sender].timestamp) {
+                console.log(`[YTMP3] Session timeout for ${msg.sender}`);
                 delete global.ytmp3Sessions[msg.sender];
             }
         }, 5 * 60 * 1000); // 5 menit
