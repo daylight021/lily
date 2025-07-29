@@ -55,7 +55,7 @@ module.exports = {
               console.log(`[COMMAND] Executing ytmp4 with button response`);
               
               // Buat args dengan format button response
-              const fakeArgs = [msg.text]; // "Download 1080p"
+              const fakeArgs = [msg.text];
               
               // Execute ytmp4 command dengan button response
               const extra = { 
