@@ -5,6 +5,8 @@ const axios = require('axios');
 
 // --- FUNGSI HELPER ---
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Fungsi untuk scroll halaman
 async function autoScroll(page) {
   await page.evaluate(async () => {
@@ -39,15 +41,13 @@ function shuffleArray(array) {
 async function getPinterestLinks(keyword, type = 'image') {
   let browser;
   try {
-    // --- PERBAIKAN PUPPETEER ---
-    // Menentukan path ke executable chromium yang sudah di-install
     const executablePath = fs.existsSync('/usr/bin/chromium-browser') 
       ? '/usr/bin/chromium-browser' 
       : undefined;
 
     browser = await puppeteer.launch({
       headless: true,
-      executablePath, // Menggunakan browser dari sistem
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -74,7 +74,8 @@ async function getPinterestLinks(keyword, type = 'image') {
     if (type === 'image') {
       results = await page.evaluate(() => {
         const images = Array.from(document.querySelectorAll('img[src*="i.pinimg.com"]'));
-        const imageUrls = images.map(img => img.src.replace(/236x/, '736x'));
+        // <<-- PERBAIKAN LOGIKA PENGAMBILAN URL GAMBAR RESOLUSI TINGGI -->>
+        const imageUrls = images.map(img => img.src.replace(/(\/\d+x\/)/, '/originals/'));
         return [...new Set(imageUrls)];
       });
     } else if (type === 'video') {
@@ -94,7 +95,7 @@ async function getPinterestLinks(keyword, type = 'image') {
   }
 }
 
-// Fungsi untuk mengunduh video via Pintodown (dari kode Anda)
+// Fungsi untuk mengunduh video via Pintodown
 async function downloadViaPintodown(pinUrl) {
   let browser;
   try {
@@ -107,17 +108,16 @@ async function downloadViaPintodown(pinUrl) {
     await page.type('#pinterest_video_url', pinUrl);
     await page.click('button.pinterest__button--download');
 
-    // Menunggu link download muncul
     await page.waitForSelector('a[href$=".mp4"]', { timeout: 15000 });
     const videoUrl = await page.evaluate(() => document.querySelector('a[href$=".mp4"]').href);
 
     await browser.close();
-    return videoUrl; // Mengembalikan URL video untuk dikirim
+    return videoUrl;
 
   } catch (err) {
     console.error(`❌ Gagal unduh video dari ${pinUrl}: ${err.message}`);
     if (browser) await browser.close();
-    return null; // Mengembalikan null jika gagal
+    return null;
   }
 }
 
@@ -126,7 +126,7 @@ async function downloadViaPintodown(pinUrl) {
 module.exports = {
   name: "pin",
   alias: ["pinterest"],
-  description: "Mencari gambar atau video dari Pinterest.",
+  description: "Mencari gambar dari Pinterest.",
   category: "tools",
   execute: async (msg, { bot, args, usedPrefix, command }) => {
     if (!args.length) {
@@ -141,7 +141,7 @@ module.exports = {
     for (let i = 0; i < args.length; i++) {
       if (args[i].toLowerCase() === '-j') {
         count = parseInt(args[i + 1], 10) || 1;
-        count = Math.min(Math.max(1, count), 5); // Batasi antara 1 dan 5
+        count = Math.min(Math.max(1, count), 5);
         i++;
       } else if (args[i].toLowerCase() === '-v') {
         searchVideos = true;
