@@ -40,13 +40,13 @@ module.exports = {
       const botPrefix = new RegExp("^[" + "/!#$%+£¢€¥^°=¶∆×÷π√✓©®:;?&.\\-".replace(/[|\\{}()[\]^$+*?.\-\^]/g, "\\$&") + "]");
       const isCommand = msg.text && botPrefix.test(msg.text);
 
-      // ========== HANDLER UNTUK BUTTON RESPONSE YOUTUBE ==========
+      // ========== HANDLER UNTUK BUTTON RESPONSE YOUTUBE VIDEO ==========
       if (msg.text && msg.text.startsWith("Download ") && msg.text.match(/Download (1080p|720p|480p|360p|240p|144p)/)) {
-        console.log(`[BUTTON_HANDLER] YouTube button detected: "${msg.text}" from ${msg.sender}`);
+        console.log(`[BUTTON_HANDLER] YouTube video button detected: "${msg.text}" from ${msg.sender}`);
         
         // Cek apakah user memiliki session YouTube yang aktif
         if (global.ytSessions && global.ytSessions[msg.sender]) {
-          console.log(`[SESSION] Found active session for ${msg.sender}: ${global.ytSessions[msg.sender].url}`);
+          console.log(`[SESSION] Found active ytmp4 session for ${msg.sender}: ${global.ytSessions[msg.sender].url}`);
           
           try {
             // Ambil command ytmp4
@@ -73,40 +73,64 @@ module.exports = {
               return msg.reply("❌ Command ytmp4 tidak ditemukan.");
             }
           } catch (error) {
-            console.error('Error handling YouTube button response:', error);
-            return msg.reply("❌ Terjadi kesalahan saat memproses pilihan kualitas.");
+            console.error('Error handling YouTube video button response:', error);
+            return msg.reply("❌ Terjadi kesalahan saat memproses pilihan kualitas video.");
           }
         } else {
-          console.log(`[SESSION] No active session found for ${msg.sender}`);
-          console.log(`[SESSION] Available sessions:`, Object.keys(global.ytSessions || {}));
+          console.log(`[SESSION] No active ytmp4 session found for ${msg.sender}`);
+          console.log(`[SESSION] Available ytmp4 sessions:`, Object.keys(global.ytSessions || {}));
           return msg.reply("❌ Session expired. Silakan kirim ulang URL YouTube.");
         }
       }
 
-      // ========== HANDLER UNTUK BUTTON RESPONSE LAINNYA ==========
-      if (msg.text && msg.text.startsWith("Download Audio ") && msg.text.match(/Download Audio (128kbps|192kbps|256kbps|320kbps)/)) {
+      // ========== HANDLER UNTUK BUTTON RESPONSE YOUTUBE AUDIO ==========
+      if (msg.text && msg.text.startsWith("Download Audio ") && msg.text.match(/Download Audio (\d+kbps)/)) {
+        console.log(`[BUTTON_HANDLER] YouTube audio button detected: "${msg.text}" from ${msg.sender}`);
+        
+        // Cek apakah user memiliki session YouTube Audio yang aktif
         if (global.ytmp3Sessions && global.ytmp3Sessions[msg.sender]) {
+          console.log(`[SESSION] Found active ytmp3 session for ${msg.sender}: ${global.ytmp3Sessions[msg.sender].url}`);
+          
           try {
-            const ytmp3Command = this.commands.get('ytmp3');
+            // Ambil command ytmp3
+            const ytmp3Command = this.commands.get('ytmp3') || this.commands.get('yta');
             if (ytmp3Command) {
+              console.log(`[COMMAND] Executing ytmp3 with button response`);
+              
+              // Buat args dengan format button response
               const fakeArgs = [msg.text];
+              
+              // Execute ytmp3 command dengan button response
               const extra = { 
                 bot: this, 
-                usedPrefix: '/', 
+                usedPrefix: '/', // Default prefix
                 participants: [], 
                 groupMetadata: null, 
                 args: fakeArgs, 
                 command: 'ytmp3' 
               };
+              
               return await ytmp3Command.execute.call(this, msg, extra);
+            } else {
+              console.log(`[ERROR] ytmp3 command not found in commands collection`);
+              return msg.reply("❌ Command ytmp3 tidak ditemukan.");
             }
           } catch (error) {
-            console.error('Error handling ytmp3 button response:', error);
+            console.error('Error handling YouTube audio button response:', error);
             return msg.reply("❌ Terjadi kesalahan saat memproses pilihan kualitas audio.");
           }
         } else {
+          console.log(`[SESSION] No active ytmp3 session found for ${msg.sender}`);
+          console.log(`[SESSION] Available ytmp3 sessions:`, Object.keys(global.ytmp3Sessions || {}));
           return msg.reply("❌ Session expired. Silakan kirim ulang URL YouTube.");
         }
+      }
+
+      // ========== ADDITIONAL BUTTON HANDLERS ==========
+      // Handler untuk button response lainnya bisa ditambahkan di sini
+      if (msg.text && msg.text.startsWith("Download ") && !msg.text.match(/Download (1080p|720p|480p|360p|240p|144p|Audio \d+kbps)/)) {
+        console.log(`[BUTTON_HANDLER] Other button response detected: "${msg.text}" from ${msg.sender}`);
+        // Tambahkan handler untuk button lainnya jika diperlukan
       }
 
       // ========== SPAM CHECK ==========
