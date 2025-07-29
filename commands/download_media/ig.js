@@ -1,43 +1,44 @@
 const axios = require("axios");
+const cheerio = require("cheerio");
 
+// Fallback ke yt1s.io dengan logika scraping yang lebih cerdas
 async function instagramDl(url) {
     try {
-        const response = await axios.post('https://snapinsta.app/api/ajaxSearch', new URLSearchParams({
-            q: url,
-            vt: 'home'
-        }), {
+        const { data } = await axios.post('https://yt1s.io/api/ajaxSearch', new URLSearchParams({ q: url, vt: 'ig' }), {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-                'Referer': 'https://snapinsta.app/'
+                'Referer': 'https://yt1s.io/'
             }
         });
 
-        const data = response.data;
-        if (data.status !== 'ok' || !data.data) {
-            throw new Error('Gagal mendapatkan data dari Snapinsta atau URL tidak valid.');
-        }
+        const $ = cheerio.load(data.data);
+        const result = new Set(); // Menggunakan Set untuk menghindari duplikasi URL
 
-        // Regex untuk mengekstrak URL dari HTML yang dikembalikan
-        const regex = /<a href="([^"]+)" target="_blank" class="download-btn" rel="noopener noreferrer nofollow">Download<\/a>/g;
-        let match;
-        const mediaUrls = [];
-
-        // Loop melalui semua link download yang ditemukan
-        while ((match = regex.exec(data.data)) !== null) {
-            if (!match[1].endsWith('jpeg.jpg') && !match[1].endsWith('webp.webp')) {
-                 mediaUrls.push(match[1]);
+        // Iterasi setiap container media untuk mengambil link utama saja
+        $('div.dl-item').each((i, element) => {
+            // Cari link download video (.mp4) terlebih dahulu
+            let mediaUrl = $(element).find('a[href*=".mp4"]').attr('href');
+            
+            // Jika tidak ada video, baru cari link gambar
+            if (!mediaUrl) {
+                mediaUrl = $(element).find('a[href*=".jpg"]').attr('href');
             }
-        }
-        
-        if (mediaUrls.length === 0) {
-            throw new Error("Tidak ada media yang dapat diunduh ditemukan.");
+
+            if (mediaUrl) {
+                result.add(mediaUrl);
+            }
+        });
+
+        if (result.size === 0) {
+            throw new Error("Tidak ada link unduhan yang ditemukan dalam respons API.");
         }
 
-        return mediaUrls;
+        return Array.from(result);
 
     } catch (e) {
-        throw new Error(`API Snapinsta gagal: ${e.message}`);
+        const errorMessage = e.response ? e.response.data : e.message;
+        throw new Error(`Gagal saat scraping dari yt1s.io: ${errorMessage}`);
     }
 }
 
