@@ -5,30 +5,39 @@ const axios = require('axios');
 
 // --- FUNGSI HELPER YANG DIOPTIMALKAN ---
 
-// Scroll yang lebih efisien dan cepat
+// Scroll yang lebih efisien dan cepat (kompatibel semua versi Puppeteer)
 async function smartScroll(page, maxScrolls = 3) {
-  await page.evaluate(async (maxScrolls) => {
-    await new Promise(resolve => {
-      let scrollCount = 0;
-      const distance = 1000; // Scroll lebih besar per step
-      const timer = setInterval(() => {
-        const scrollHeight = document.body.scrollHeight;
-        const currentScroll = window.pageYOffset + window.innerHeight;
-        
-        window.scrollBy(0, distance);
-        scrollCount++;
-        
-        // Stop jika sudah mencapai bottom atau max scroll
-        if (currentScroll >= scrollHeight || scrollCount >= maxScrolls) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 800); // Interval lebih lama untuk loading
+  try {
+    await page.evaluate(async (maxScrolls) => {
+      await new Promise(resolve => {
+        let scrollCount = 0;
+        const distance = 1000; // Scroll lebih besar per step
+        const timer = setInterval(() => {
+          const scrollHeight = document.body.scrollHeight;
+          const currentScroll = window.pageYOffset + window.innerHeight;
+          
+          window.scrollBy(0, distance);
+          scrollCount++;
+          
+          // Stop jika sudah mencapai bottom atau max scroll
+          if (currentScroll >= scrollHeight || scrollCount >= maxScrolls) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 800); // Interval lebih lama untuk loading
+      });
+    }, maxScrolls);
+    
+    // Wait for images to load (kompatibel dengan semua versi Puppeteer)
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  } catch (error) {
+    console.log('⚠️ Warning scroll:', error.message);
+    // Fallback scroll sederhana jika error
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
     });
-  }, maxScrolls);
-  
-  // Wait for images to load
-  await page.waitForTimeout(2000);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+  }
 }
 
 // Fungsi untuk mengacak array
@@ -94,11 +103,13 @@ async function getPinterestLinks(keyword, type = 'image') {
       timeout: 30000 
     });
 
-    // Wait for Pinterest to load properly
+    // Wait for Pinterest to load properly (kompatibel semua versi)
     try {
       await page.waitForSelector('[data-test-id="pin"]', { timeout: 10000 });
     } catch (e) {
-      console.log('Selector utama tidak ditemukan, mencoba alternatif...');
+      console.log('Selector utama tidak ditemukan, menunggu loading...');
+      // Fallback wait
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
     // Smart scroll - hanya 2-3 kali scroll untuk mendapatkan ~20-30 gambar
