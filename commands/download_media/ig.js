@@ -1,14 +1,6 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
-const { fileTypeFromBuffer } = require("file-type"); // Menggunakan file-type jika tersedia
 
-/**
- * =================================================================
- * FUNGSI IG Downloader Berdasarkan Repositori Hitori (nazedev)
- * =================================================================
- * Ini adalah implementasi ulang dari fungsi yang sudah terbukti
- * berhasil, menggunakan yt1s.io dan cheerio.
- */
 async function instagramDl(url) {
     return new Promise(async (resolve, reject) => {
         try {
@@ -68,6 +60,8 @@ module.exports = {
       }
 
       await msg.reply(`✅ Berhasil mendapatkan ${mediaUrls.length} media. Mengirim...`);
+
+      const { fileTypeFromBuffer } = await import('file-type');
 
       for (const [index, mediaUrl] of mediaUrls.entries()) {
         const caption = `✅ Media ${index + 1}/${mediaUrls.length}`;
