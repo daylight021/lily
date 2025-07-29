@@ -1,28 +1,8 @@
-const puppeteer = require('puppeteer');
-const fs = require('fs-extra');
-const path = require('path');
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 // --- FUNGSI HELPER ---
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function autoScroll(page) {
-  await page.evaluate(async () => {
-    await new Promise(resolve => {
-      let totalHeight = 0;
-      const distance = 200;
-      const scrollMax = 5000;
-      const timer = setInterval(() => {
-        window.scrollBy(0, distance);
-        totalHeight += distance;
-        if (totalHeight >= scrollMax) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 100);
-    });
-  });
-}
 
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -32,107 +12,60 @@ function shuffleArray(array) {
     return array;
 }
 
-// --- FUNGSI UTAMA SCRAPING & DOWNLOAD ---
-
-async function getPinterestLinks(keyword, type = 'image') {
-  let browser;
-  try {
-    const executablePath = fs.existsSync('/usr/bin/chromium-browser') 
-      ? '/usr/bin/chromium-browser' 
-      : undefined;
-
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-    });
-
-    const page = await browser.newPage();
-    const query = encodeURIComponent(keyword);
-    const url = `https://id.pinterest.com/search/pins/?q=${query}`;
-
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
-    
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
-    
-    await autoScroll(page);
-
-    let results = [];
-    if (type === 'image') {
-      results = await page.evaluate(() => {
-        const images = Array.from(document.querySelectorAll('img[src*="i.pinimg.com"]'));
-        const imageUrls = images.map(img => img.src.replace(/(\/\d+x\/)/, '/originals/'));
-        return [...new Set(imageUrls)];
-      });
-    } else if (type === 'video') {
-      results = await page.evaluate(() => {
-        const anchors = Array.from(document.querySelectorAll('a[href*="/pin/"]'));
-        return [...new Set(anchors.map(a => 'https://www.pinterest.com' + a.getAttribute('href'))) ];
-      });
-    }
-    
-    await browser.close();
-    return results;
-
-  } catch (error) {
-    console.error("Error saat scraping dengan Puppeteer:", error);
-    if (browser) await browser.close();
-    return [];
-  }
-}
-
-async function downloadImage(imageUrl) {
-    let browser;
+async function searchPinterest(query) {
     try {
-        const executablePath = fs.existsSync('/usr/bin/chromium-browser') ? '/usr/bin/chromium-browser' : undefined;
-        browser = await puppeteer.launch({ headless: true, executablePath, args: ['--no-sandbox'] });
-        const page = await browser.newPage();
-        
-        await page.setExtraHTTPHeaders({ 'Referer': 'https://www.pinterest.com/' });
+        const url = `https://id.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`;
+        const { data } = await axios.get(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+            }
+        });
 
-        const response = await page.goto(imageUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-        const buffer = await response.buffer();
+        const $ = cheerio.load(data);
+        // Menemukan data JSON yang tersembunyi di dalam tag script
+        const searchData = $('script[data-test-id="initial-props"]').html();
+        if (!searchData) {
+            throw new Error("Tidak dapat menemukan data JSON di halaman Pinterest.");
+        }
         
-        await browser.close();
-        return buffer;
+        const json = JSON.parse(searchData);
+        // Menavigasi objek JSON untuk menemukan hasil pencarian
+        const results = json.props.initialReduxState.results.resourceResponses[0].response.data.results;
+        
+        if (!results || results.length === 0) return [];
+        
+        const media = results.map(item => {
+            // Cek apakah item adalah video atau gambar
+            if (item.videos && item.videos.video_list.V_720P) {
+                return {
+                    type: 'video',
+                    url: item.videos.video_list.V_720P.url
+                };
+            }
+            // Ambil gambar dengan resolusi 'originals' (tertinggi)
+            if (item.images.orig) {
+                return {
+                    type: 'image',
+                    url: item.images.orig.url
+                };
+            }
+            return null;
+        }).filter(item => item !== null); // Hapus item yang tidak valid
+
+        return media;
+
     } catch (error) {
-        console.error(`Gagal mengunduh gambar dari ${imageUrl}:`, error);
-        if (browser) await browser.close();
-        return null;
+        console.error("Error saat scraping Pinterest:", error);
+        throw new Error("Gagal mengambil data dari Pinterest. Mungkin struktur halaman berubah.");
     }
 }
 
-
-async function downloadViaPintodown(pinUrl) {
-  let browser;
-  try {
-    const executablePath = fs.existsSync('/usr/bin/chromium-browser') ? '/usr/bin/chromium-browser' : undefined;
-    browser = await puppeteer.launch({ headless: true, executablePath, args: ['--no-sandbox'] });
-    const page = await browser.newPage();
-    
-    await page.goto('https://pintodown.com/', { waitUntil: 'domcontentloaded', timeout: 60000 }); // Tambah timeout
-
-    await page.type('#pinterest_video_url', pinUrl);
-    await page.click('button.pinterest__button--download');
-
-    await page.waitForSelector('a[href$=".mp4"]', { timeout: 15000 });
-    const videoUrl = await page.evaluate(() => document.querySelector('a[href$=".mp4"]').href);
-
-    await browser.close();
-    return videoUrl;
-
-  } catch (err) {
-    console.error(`❌ Gagal unduh video dari ${pinUrl}: ${err.message}`);
-    if (browser) await browser.close();
-    return null;
-  }
-}
 
 // --- LOGIKA UTAMA PERINTAH BOT ---
 module.exports = {
   name: "pin",
   alias: ["pinterest"],
-  description: "Mencari gambar dari Pinterest.",
+  description: "Mencari gambar atau video dari Pinterest.",
   category: "tools",
   execute: async (msg, { bot, args, usedPrefix, command }) => {
     if (!args.length) {
@@ -142,7 +75,7 @@ module.exports = {
 
     let query = [];
     let count = 1;
-    let searchVideos = false;
+    let searchFor = 'image'; // Default mencari gambar
 
     for (let i = 0; i < args.length; i++) {
       if (args[i].toLowerCase() === '-j') {
@@ -150,7 +83,7 @@ module.exports = {
         count = Math.min(Math.max(1, count), 5);
         i++;
       } else if (args[i].toLowerCase() === '-v') {
-        searchVideos = true;
+        searchFor = 'video';
       } else {
         query.push(args[i]);
       }
@@ -160,33 +93,31 @@ module.exports = {
 
     try {
       await msg.react("⏳");
-      const searchType = searchVideos ? 'video' : 'image';
       
-      const results = await getPinterestLinks(searchQuery, searchType);
+      const allMedia = await searchPinterest(searchQuery);
+      const filteredMedia = allMedia.filter(item => item.type === searchFor);
 
-      if (!results || results.length === 0) {
+      if (!filteredMedia || filteredMedia.length === 0) {
         await msg.react("❌");
-        return msg.reply("Maaf, tidak ada hasil yang ditemukan. Coba dengan kata kunci lain.");
+        return msg.reply(`Maaf, tidak ada hasil ${searchFor} yang ditemukan untuk "${searchQuery}".`);
       }
       
-      const itemsToSend = shuffleArray(results).slice(0, count);
+      const itemsToSend = shuffleArray(filteredMedia).slice(0, count);
 
       for (const item of itemsToSend) {
-        if (searchType === 'image') {
-          const imageBuffer = await downloadImage(item);
-          if (imageBuffer) {
-              await bot.sendMessage(msg.from, { image: imageBuffer, caption: `Hasil pencarian untuk: *${searchQuery}*` }, { quoted: msg });
-          } else {
-              await msg.reply(`Gagal mengunduh gambar dari salah satu link.`);
-          }
-        } else if (searchType === 'video') {
-            msg.reply(`Mencoba mengunduh video dari: ${item}\nMohon tunggu sebentar...`);
-            const videoUrl = await downloadViaPintodown(item);
-            if (videoUrl) {
-                await bot.sendMessage(msg.from, { video: { url: videoUrl }, caption: `Video *${searchQuery}* berhasil diunduh.` }, { quoted: msg });
-            } else {
-                msg.reply(`Gagal mengunduh video dari link tersebut.`);
+        try {
+            if (item.type === 'image') {
+                const imageBuffer = await axios.get(item.url, {
+                    responseType: 'arraybuffer',
+                    headers: { 'Referer': 'https://www.pinterest.com/' }
+                });
+                await bot.sendMessage(msg.from, { image: imageBuffer.data, caption: `Hasil pencarian untuk: *${searchQuery}*` }, { quoted: msg });
+            } else if (item.type === 'video') {
+                await bot.sendMessage(msg.from, { video: { url: item.url }, caption: `Video *${searchQuery}* berhasil ditemukan.` }, { quoted: msg });
             }
+        } catch (downloadError) {
+             console.error("Gagal mengirim media Pinterest:", downloadError);
+             await msg.reply(`Gagal mengirim salah satu media.`);
         }
         await sleep(1500);
       }
@@ -196,7 +127,7 @@ module.exports = {
     } catch (error) {
       console.error("Error pada perintah Pinterest:", error);
       await msg.react("❌");
-      msg.reply("Terjadi kesalahan saat memproses permintaan Anda.");
+      msg.reply(error.message || "Terjadi kesalahan saat memproses permintaan Anda.");
     }
   },
 };
