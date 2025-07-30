@@ -4,20 +4,25 @@ const path = require('path');
 const fs = require('fs');
 
 // Register fonts saat module dimuat
+let emojiSupported = false;
 try {
     const fontsDir = path.join(__dirname, '../lib/fonts');
     
     // Register Noto Color Emoji font
     const emojiFont = path.join(fontsDir, 'NotoColorEmoji.ttf');
     if (fs.existsSync(emojiFont)) {
-        registerFont(emojiFont, { family: 'Noto Color Emoji' });
+        registerFont(emojiFont, { family: 'NotoColorEmoji' });
         console.log('✅ Noto Color Emoji font loaded successfully');
+        emojiSupported = true;
+    } else {
+        console.warn('⚠️ NotoColorEmoji.ttf not found at:', emojiFont);
     }
     
     // Register fallback fonts jika ada
     const notoSans = path.join(fontsDir, 'NotoSans-Regular.ttf');
     if (fs.existsSync(notoSans)) {
-        registerFont(notoSans, { family: 'Noto Sans' });
+        registerFont(notoSans, { family: 'NotoSans' });
+        console.log('✅ Noto Sans font loaded successfully');
     }
     
 } catch (error) {
@@ -112,7 +117,11 @@ function drawTextWithFormatting(ctx, text, x, y, fontSize, fontFamily) {
         const textParts = parseTextAndEmoji(part);
         for (const textPart of textParts) {
             if (textPart.type === 'emoji') {
-                ctx.font = `${fontSize}px "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji"`;
+                // Try different emoji font combinations
+                const emojiFont = emojiSupported ? 
+                    `${fontSize}px "NotoColorEmoji", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "EmojiOne Color"` :
+                    `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Emoji", serif`;
+                ctx.font = emojiFont;
             } else {
                 const fontStyle = `${tempItalic ? 'italic' : ''} ${tempBold ? 'bold' : ''} ${fontSize}px ${fontFamily}`;
                 ctx.font = fontStyle.trim();
@@ -142,7 +151,10 @@ function drawTextWithFormatting(ctx, text, x, y, fontSize, fontFamily) {
             
             for (const textPart of textParts) {
                 if (textPart.type === 'emoji') {
-                    ctx.font = `${fontSize}px "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji"`;
+                    const emojiFont = emojiSupported ? 
+                        `${fontSize}px "NotoColorEmoji", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji"` :
+                        `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Emoji", serif`;
+                    ctx.font = emojiFont;
                 } else {
                     const fontStyle = `${isItalic ? 'italic' : ''} ${isBold ? 'bold' : ''} ${fontSize}px ${fontFamily}`;
                     ctx.font = fontStyle.trim();
@@ -168,8 +180,14 @@ function drawTextWithFormatting(ctx, text, x, y, fontSize, fontFamily) {
         
         for (const textPart of textParts) {
             if (textPart.type === 'emoji') {
-                // Set font untuk emoji
-                ctx.font = `${fontSize}px "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji"`;
+                // Set font untuk emoji dengan multiple fallbacks
+                const emojiFont = emojiSupported ? 
+                    `${fontSize}px "NotoColorEmoji", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji"` :
+                    `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Emoji", serif`;
+                ctx.font = emojiFont;
+                
+                // Set rendering properties untuk emoji
+                ctx.textRenderingOptimization = 'optimizeQuality';
                 ctx.fillText(textPart.content, currentX, y);
                 currentX += ctx.measureText(textPart.content).width;
             } else if (textPart.content.trim()) {
