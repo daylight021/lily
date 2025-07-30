@@ -2,20 +2,18 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
-const availableFontsDir = path.join(__dirname, '../../lib/fonts');
+const fontsDir = path.join(__dirname, '../assets/fonts');
 
-// Ambil daftar font dari folder assets/fonts
 function listAvailableFonts() {
-    if (!fs.existsSync(availableFontsDir)) return [];
-    return fs.readdirSync(availableFontsDir)
+    if (!fs.existsSync(fontsDir)) return [];
+    return fs.readdirSync(fontsDir)
         .filter(file => /\.(ttf|otf)$/i.test(file))
         .map(file => {
-            const name = path.parse(file).name.replace(/[-_]?Regular$/i, '');
-            return { name: name.toLowerCase(), file };
+            const name = path.parse(file).name.toLowerCase();
+            return { name, file };
         });
 }
 
-// Format teks jadi 2–3 per baris dengan logika ganjil/vertikal
 function formatText(text) {
     const words = text.trim().split(/\s+/);
     const total = words.length;
@@ -53,12 +51,17 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
     const fontSize = lineCount > 6 ? 28 : lineCount > 4 ? 36 : 44;
     const lineHeight = fontSize * 1.6;
 
-    const fontPath = listAvailableFonts().find(f => f.name === fontName?.toLowerCase());
-    if (fontPath) {
-        await page.evaluateOnNewDocument((family, path) => {
-            const font = new FontFace(family, `url("file://${path}")`);
-            font.load().then(() => document.fonts.add(font));
-        }, fontPath.name, path.join(availableFontsDir, fontPath.file));
+    const fonts = listAvailableFonts();
+    const matchedFont = fonts.find(f => f.name === fontName?.toLowerCase());
+    let fontFaceCSS = '';
+
+    if (matchedFont) {
+        const fontPath = `file://${path.join(fontsDir, matchedFont.file)}`;
+        fontFaceCSS = `
+        @font-face {
+            font-family: 'CustomFont';
+            src: url('${fontPath}');
+        }`;
     }
 
     const html = `
@@ -66,11 +69,12 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
     <head>
         <meta charset="utf-8">
         <style>
+            ${fontFaceCSS}
             html, body {
                 margin: 0;
                 background: ${transparent ? 'transparent' : 'white'};
                 padding: 0;
-                font-family: "${fontPath?.name || 'Noto Color Emoji'}, Segoe UI Emoji, Apple Color Emoji, sans-serif";
+                font-family: ${matchedFont ? 'CustomFont' : '"Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif'};
             }
             .container {
                 display: inline-block;
@@ -78,7 +82,9 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
                 text-align: justify;
                 font-size: ${fontSize}px;
                 line-height: ${lineHeight}px;
-                color: #333;
+                color: ${transparent ? '#fff' : '#333'};
+                -webkit-text-stroke: ${transparent ? '1px black' : 'none'};
+                text-shadow: ${transparent ? '0 0 2px black' : 'none'};
                 word-wrap: break-word;
                 text-justify: inter-word;
                 max-width: 800px;
@@ -140,41 +146,49 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
 module.exports = {
     name: "stext",
     alias: ["stickertext", "stikerteks"],
-    description: "Buat stiker teks kotak dengan emoji warna, transparansi, dan font kustom.",
+    description: "Buat stiker teks kotak dengan emoji warna, background transparan, dan font kustom.",
     category: "converter",
     execute: async (msg, { bot, args, usedPrefix, command }) => {
-        const argString = args.join(' ').trim();
-        if (!argString) {
-            return msg.reply(`Gunakan:\n*${usedPrefix + command} [-t] [-nama_font] <teks>*\n\nContoh:\n${usedPrefix + command} -t -raleway makan dulu 😋`);
+        const input = args.join(' ').trim();
+        if (!input) {
+            return msg.reply(`Gunakan:\n*${usedPrefix + command} [-t] [-nama_font] <teks>*\n\nContoh:\n${usedPrefix + command} -t -raleway-heavy makan dulu 😋`);
         }
 
-        if (argString === '-font') {
-            const fontList = listAvailableFonts();
-            if (fontList.length === 0) return msg.reply('❌ Tidak ada font ditemukan di folder assets/fonts.');
-
-            let fontPreview = '*📚 Font Tersedia:*\n\n';
-            fontList.forEach(f => {
-                fontPreview += `- *${f.name}*: Gunakan dengan \`-` + f.name + `\`\n`;
+        if (input === '-font') {
+            const fonts = listAvailableFonts();
+            if (fonts.length === 0) return msg.reply('❌ Tidak ada font ditemukan di folder assets/fonts.');
+            let reply = '*📚 Font Tersedia:*\n\n';
+            fonts.forEach(f => {
+                reply += `- *${f.name}*: Gunakan dengan \`-${f.name}\`\n`;
             });
-
-            return msg.reply(fontPreview);
+            return msg.reply(reply);
         }
 
-        const matchFlags = argString.match(/(?:^|\s)-([a-z0-9]+)/gi) || [];
-        const flags = matchFlags.map(f => f.trim().slice(1).toLowerCase());
-        const text = argString.replace(/(?:^|\s)-([a-z0-9]+)/gi, '').trim();
+        // Deteksi flag (diawali tanda minus)
+        const flags = [];
+        const words = input.trim().split(/\s+/);
+        const contentWords = [];
 
-        if (!text) return msg.reply('❌ Teks kosong setelah menghapus parameter.');
+        for (const word of words) {
+            if (/^-/.test(word) && word.length > 1) {
+                flags.push(word.slice(1).toLowerCase());
+            } else {
+                contentWords.push(word);
+            }
+        }
+
+        const text = contentWords.join(' ').trim();
+        if (!text) return msg.reply('❌ Teks tidak ditemukan setelah parameter.');
 
         const isTransparent = flags.includes('t');
-        const fontArg = flags.find(f => f !== 't');
-        const fontList = listAvailableFonts().map(f => f.name);
-        const chosenFont = fontList.includes(fontArg) ? fontArg : null;
+        const fonts = listAvailableFonts();
+        const fontFlag = flags.find(f => f !== 't' && fonts.some(ff => ff.name === f));
+        const fontToUse = fontFlag || null;
 
         try {
             await msg.react("🎨");
 
-            const imageBuffer = await generateImageWithPuppeteer(text, chosenFont, isTransparent);
+            const imageBuffer = await generateImageWithPuppeteer(text, fontToUse, isTransparent);
 
             const sticker = new Sticker(imageBuffer, {
                 pack: process.env.stickerPackname || 'Text Sticker',
