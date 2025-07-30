@@ -36,20 +36,30 @@ function processFormatting(text) {
         .replace(/~([^~]+)~/g, '<tspan text-decoration="line-through">$1</tspan>');
 }
 
-// Generate SVG dengan background putih dan emoji support yang lebih baik
-function generateSVG(text) {
+// Generate SVG dengan emoji font support
+function generateColorEmojiSVG(text) {
     const lines = formatText(text);
     const fontSize = lines.length > 2 ? 48 : lines.length > 1 ? 56 : 64;
     const lineHeight = fontSize * 1.2;
     const totalHeight = lines.length * lineHeight;
     const startY = (512 - totalHeight) / 2 + fontSize * 0.8;
     
-    // Simplified SVG dengan background putih
+    // Font stack untuk emoji support
+    const fontFamily = '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Twitter Color Emoji", "EmojiOne Color", "Symbola", Arial, sans-serif';
+    
     const textElements = lines.map((line, index) => {
         const y = startY + (index * lineHeight);
         const processedLine = processFormatting(escapeHtml(line));
         
-        return `<text x="256" y="${y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${fontSize}" fill="#333333">${processedLine}</text>`;
+        return `
+            <text x="256" y="${y}" 
+                  text-anchor="middle" 
+                  font-family="${fontFamily}"
+                  font-size="${fontSize}" 
+                  fill="#333333"
+                  dominant-baseline="middle">
+                ${processedLine}
+            </text>`;
     }).join('');
     
     const svg = `
@@ -57,20 +67,66 @@ function generateSVG(text) {
         <!-- Background putih -->
         <rect width="512" height="512" fill="#ffffff"/>
         
-        <!-- Teks -->
+        <!-- Teks dengan emoji support -->
         ${textElements}
     </svg>`;
     
     return svg;
 }
 
-// Alternative: Canvas-like approach dengan Sharp
-async function generateSimpleTextImage(text) {
+// Canvas-based approach dengan better emoji support
+async function generateCanvasImage(text) {
+    try {
+        const { createCanvas, registerFont } = require('canvas');
+        
+        // Try to register emoji fonts if available
+        try {
+            registerFont('/usr/share/fonts/truetype/NotoColorEmoji.ttf', { family: 'Noto Color Emoji' });
+        } catch (e) {
+            console.log('⚠️ Noto Color Emoji font not found, using system default');
+        }
+        
+        const lines = formatText(text);
+        const fontSize = lines.length > 2 ? 48 : lines.length > 1 ? 56 : 64;
+        const lineHeight = fontSize * 1.2;
+        
+        const canvas = createCanvas(512, 512);
+        const ctx = canvas.getContext('2d');
+        
+        // White background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 512, 512);
+        
+        // Text styling
+        ctx.fillStyle = '#333333';
+        ctx.font = `${fontSize}px "Noto Color Emoji", Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Draw each line
+        const totalHeight = lines.length * lineHeight;
+        const startY = (512 - totalHeight) / 2 + lineHeight / 2;
+        
+        lines.forEach((line, index) => {
+            const y = startY + (index * lineHeight);
+            ctx.fillText(line, 256, y);
+        });
+        
+        return canvas.toBuffer('image/png');
+        
+    } catch (error) {
+        console.log('⚠️ Canvas not available:', error.message);
+        throw error;
+    }
+}
+
+// Sharp-based dengan improved font handling
+async function generateSharpImage(text) {
     const lines = formatText(text);
     const fontSize = lines.length > 2 ? 48 : lines.length > 1 ? 56 : 64;
     const lineHeight = fontSize * 1.2;
     
-    // Base white background
+    // Create white background
     let image = sharp({
         create: {
             width: 512,
@@ -80,37 +136,42 @@ async function generateSimpleTextImage(text) {
         }
     });
     
-    // Calculate text positioning
+    // Calculate positioning
     const totalHeight = lines.length * lineHeight;
     const startY = (512 - totalHeight) / 2;
     
-    // Create text overlays
     const textOverlays = [];
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const y = startY + (i * lineHeight);
         
-        // Create SVG for each line (simpler approach)
+        // Enhanced SVG with better font support
         const lineSvg = `
-        <svg width="512" height="100">
-            <text x="256" y="50" text-anchor="middle" 
-                  font-family="Arial, Helvetica, sans-serif" 
-                  font-size="${fontSize}" 
-                  fill="#333333" 
-                  font-weight="normal">
+        <svg width="512" height="100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <style>
+                    .emoji-text {
+                        font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Twitter Color Emoji", "EmojiOne Color", Arial, sans-serif;
+                        font-size: ${fontSize}px;
+                        fill: #333333;
+                        text-anchor: middle;
+                        dominant-baseline: middle;
+                    }
+                </style>
+            </defs>
+            <text x="256" y="50" class="emoji-text">
                 ${escapeHtml(line)}
             </text>
         </svg>`;
         
         textOverlays.push({
             input: Buffer.from(lineSvg),
-            top: Math.round(y - fontSize * 0.8),
+            top: Math.round(y - fontSize * 0.4),
             left: 0
         });
     }
     
-    // Apply all text overlays
     if (textOverlays.length > 0) {
         image = image.composite(textOverlays);
     }
@@ -118,37 +179,21 @@ async function generateSimpleTextImage(text) {
     return await image.png().toBuffer();
 }
 
-// Fallback method - Pure text without emoji complications
-async function generateBasicTextImage(text) {
-    const lines = formatText(text);
-    const fontSize = lines.length > 2 ? 40 : lines.length > 1 ? 48 : 56;
-    
-    // Simple SVG approach
-    const svgText = lines.map((line, index) => {
-        const y = 256 + (index - (lines.length - 1) / 2) * (fontSize * 1.3);
-        return `<text x="256" y="${y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${fontSize}" fill="#222222">${escapeHtml(line)}</text>`;
-    }).join('');
-    
-    const simpleSvg = `
-    <svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
-        <rect width="512" height="512" fill="white"/>
-        ${svgText}
-    </svg>`;
-    
-    return await sharp(Buffer.from(simpleSvg))
-        .png()
-        .toBuffer();
+// Detect if emoji is present in text
+function hasEmoji(text) {
+    const emojiRegex = /[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]/gu;
+    return emojiRegex.test(text);
 }
 
 module.exports = {
     name: "stext",
     alias: ["stickertext", "stikerteks", "stextsharp"],
-    description: "Membuat stiker dari teks dengan background putih.",
+    description: "Membuat stiker dari teks dengan emoji berwarna.",
     category: "converter",
     execute: async (msg, { bot, args, usedPrefix, command }) => {
         const text = args.join(' ');
         if (!text) {
-            return msg.reply(`Kirim perintah dengan format:\n*${usedPrefix + command} <teks kamu>*\n\nFormat yang didukung:\n- *bold* untuk tebal\n- _italic_ untuk miring\n- ~strikethrough~ untuk coret\n- Emoji support\n\nContoh: ${usedPrefix + command} Hello *World* 🎉`);
+            return msg.reply(`Kirim perintah dengan format:\n*${usedPrefix + command} <teks kamu>*\n\nFormat yang didukung:\n- *bold* untuk tebal\n- _italic_ untuk miring\n- ~strikethrough~ untuk coret\n- Emoji berwarna 🎨\n\nContoh: ${usedPrefix + command} Hello *World* 🎉`);
         }
 
         if (text.length > 80) {
@@ -158,67 +203,63 @@ module.exports = {
         try {
             await msg.react("🎨");
             console.log(`🎭 Processing stext: "${text}"`);
+            console.log(`📊 Has emoji: ${hasEmoji(text)}`);
             
             let imageBuffer;
+            let method = 'unknown';
             
             try {
-                // Method 1: Improved text rendering
-                console.log('📝 Trying improved text rendering...');
-                imageBuffer = await generateSimpleTextImage(text);
+                // Method 1: Canvas (best for emoji)
+                console.log('🖌️ Trying Canvas method...');
+                imageBuffer = await generateCanvasImage(text);
+                method = 'canvas';
                 
             } catch (error) {
-                console.log('⚠️ Method 1 failed, trying basic SVG...');
+                console.log('⚠️ Canvas failed, trying Sharp with enhanced SVG...');
                 
                 try {
-                    // Method 2: Basic SVG
-                    imageBuffer = await generateBasicTextImage(text);
+                    // Method 2: Sharp with enhanced SVG
+                    imageBuffer = await generateSharpImage(text);
+                    method = 'sharp-enhanced';
                     
                 } catch (error2) {
-                    console.log('⚠️ Method 2 failed, trying original SVG...');
+                    console.log('⚠️ Enhanced Sharp failed, trying basic SVG...');
                     
-                    // Method 3: Original SVG method
-                    const svgContent = generateSVG(text);
+                    // Method 3: Basic SVG
+                    const svgContent = generateColorEmojiSVG(text);
                     imageBuffer = await sharp(Buffer.from(svgContent))
                         .png()
                         .resize(512, 512)
                         .toBuffer();
+                    method = 'svg-basic';
                 }
             }
             
-            console.log(`📦 Image buffer size: ${imageBuffer.length} bytes`);
+            console.log(`📦 Generated with ${method}, buffer size: ${imageBuffer.length} bytes`);
             
-            // Verify buffer is not empty
             if (!imageBuffer || imageBuffer.length === 0) {
                 throw new Error('Generated image buffer is empty');
             }
             
             // Create sticker
             const sticker = new Sticker(imageBuffer, {
-                pack: process.env.stickerPackname || 'Text Stickers',
+                pack: process.env.stickerPackname || 'Color Emoji Stickers',
                 author: process.env.stickerAuthor || 'Bot',
                 type: StickerTypes.FULL,
                 quality: 90,
-                background: 'transparent' // This helps with WhatsApp rendering
             });
 
             const stickerBuffer = await sticker.toMessage();
             await bot.sendMessage(msg.from, stickerBuffer, { quoted: msg });
             await msg.react("✅");
             
-            console.log('✅ Text sticker sent successfully');
+            console.log(`✅ Color emoji sticker sent successfully using ${method}`);
             
         } catch (error) {
             console.error("❌ Error pada perintah stext:", error);
             await msg.react("❌");
             
-            // Debug info
-            console.log('🔍 Debug info:', {
-                textLength: text.length,
-                hasEmoji: /[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]/gu.test(text),
-                errorMessage: error.message
-            });
-            
-            msg.reply(`❌ Terjadi kesalahan saat membuat stiker teks.\n\n🔍 Debug info:\n- Text: "${text}"\n- Length: ${text.length}\n- Error: ${error.message}\n\n💡 Coba:\n- Teks lebih pendek\n- Tanpa emoji kompleks\n- Pastikan Sharp terinstall: \`npm install sharp\``);
+            msg.reply(`❌ Terjadi kesalahan saat membuat stiker teks.\n\n🔍 Debug info:\n- Text: "${text}"\n- Has emoji: ${hasEmoji(text)}\n- Error: ${error.message}\n\n💡 Untuk emoji berwarna:\n1. Install font emoji: \`sudo apt install fonts-noto-color-emoji\`\n2. Install canvas: \`npm install canvas\`\n3. Restart bot setelah install`);
         }
     }
 };
