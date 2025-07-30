@@ -41,14 +41,14 @@ function escapeHtml(text) {
                .replace(/'/g, '&#39;');
 }
 
-// PREVIEW ALL FONTS INTO ONE IMAGE
 async function generateFontPreviewImage() {
     const fonts = listAvailableFonts();
     const svgParts = [];
+    const previewText = 'ABC abc 123';
     const rowHeight = 120;
     const width = 1000;
-    const previewText = 'ABC abc 123 😁✨';
     let y = 0;
+    let defs = '';
 
     for (const font of fonts) {
         const fontPath = path.join(fontsDir, font.file);
@@ -57,8 +57,7 @@ async function generateFontPreviewImage() {
         const ext = font.file.endsWith('.otf') ? 'opentype' : 'truetype';
         const fontId = `font_${font.name.replace(/[^a-z0-9]/gi, '_')}`;
 
-        svgParts.push(`
-        <style>
+        defs += `
         @font-face {
             font-family: '${fontId}';
             src: url(data:font/${ext};charset=utf-8;base64,${fontBase64}) format('${ext}');
@@ -67,12 +66,13 @@ async function generateFontPreviewImage() {
             font-family: '${fontId}';
             font-size: 38px;
         }
-        .label {
+        .label-${fontId} {
             font-size: 22px;
-            fill: #888;
-        }
-        </style>
-        <text x="50" y="${y + 30}" class="label">${font.name}</text>
+            fill: #666;
+        }`;
+
+        svgParts.push(`
+        <text x="50" y="${y + 30}" class="label-${fontId}">${font.name}</text>
         <text x="50" y="${y + 90}" class="f-${fontId}">${escapeHtml(previewText)}</text>
         `);
 
@@ -83,15 +83,19 @@ async function generateFontPreviewImage() {
 
     const svg = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <style>${defs}</style>
     ${svgParts.join('\n')}
     </svg>`;
 
-    return await sharp(Buffer.from(svg)).png().toBuffer();
+    return await sharp(Buffer.from(svg))
+        .flatten({ background: { r: 255, g: 255, b: 255 } })
+        .png()
+        .toBuffer();
 }
 
-// MAIN IMAGE GENERATOR
+const puppeteer = require('puppeteer');
+
 async function generateImageWithPuppeteer(text, fontName, transparent = false) {
-    const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
     const page = await browser.newPage();
 
