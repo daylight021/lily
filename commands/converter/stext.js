@@ -1,7 +1,7 @@
 const sharp = require('sharp');
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
 
-// Fungsi untuk membagi teks jadi 2–3 kata per baris
+// Bagi teks jadi 2–3 kata per baris
 function formatText(text) {
     const words = text.trim().split(/\s+/);
     const lines = [];
@@ -20,7 +20,7 @@ function formatText(text) {
     return lines;
 }
 
-// Escape HTML entity untuk teks
+// Escape HTML untuk emoji & simbol
 function escapeHtml(text) {
     return text.replace(/&/g, '&amp;')
                .replace(/</g, '&lt;')
@@ -29,7 +29,7 @@ function escapeHtml(text) {
                .replace(/'/g, '&#39;');
 }
 
-// Fungsi utama untuk render dengan Puppeteer (ukuran dinamis)
+// Render HTML + buat gambar kotak dengan padding
 async function generateImageWithPuppeteer(text) {
     const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
@@ -48,19 +48,19 @@ async function generateImageWithPuppeteer(text) {
             html, body {
                 margin: 0;
                 background: white;
-                padding: 20px;
+                padding: 0;
                 font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
             }
             .container {
                 display: inline-block;
-                min-width: 512px;
-                max-width: 768px;
+                padding: 40px;
                 text-align: justify;
                 font-size: ${fontSize}px;
                 line-height: ${lineHeight}px;
                 color: #333;
                 word-wrap: break-word;
                 text-justify: inter-word;
+                max-width: 800px;
             }
             .container::after {
                 content: '';
@@ -86,26 +86,43 @@ async function generateImageWithPuppeteer(text) {
     </html>`;
 
     await page.setContent(html);
+    const element = await page.$('#capture');
+    const bbox = await element.boundingBox();
 
-    const captureElement = await page.$('#capture');
-    const boundingBox = await captureElement.boundingBox();
-
-    const buffer = await page.screenshot({
+    const screenshot = await page.screenshot({
         type: 'png',
         omitBackground: false,
         clip: {
-            x: Math.floor(boundingBox.x),
-            y: Math.floor(boundingBox.y),
-            width: Math.ceil(boundingBox.width),
-            height: Math.ceil(boundingBox.height)
+            x: Math.floor(bbox.x),
+            y: Math.floor(bbox.y),
+            width: Math.ceil(bbox.width),
+            height: Math.ceil(bbox.height),
         }
     });
 
     await browser.close();
-    return buffer;
+
+    // Buat stiker jadi persegi dengan padding putih
+    const size = Math.max(bbox.width, bbox.height);
+    const padX = Math.floor((size - bbox.width) / 2);
+    const padY = Math.floor((size - bbox.height) / 2);
+
+    const paddedImage = await sharp({
+        create: {
+            width: Math.ceil(size),
+            height: Math.ceil(size),
+            channels: 4,
+            background: { r: 255, g: 255, b: 255, alpha: 1 }
+        }
+    })
+    .composite([{ input: screenshot, left: padX, top: padY }])
+    .png()
+    .toBuffer();
+
+    return paddedImage;
 }
 
-// Deteksi apakah teks mengandung emoji
+// Deteksi emoji
 function hasEmoji(text) {
     const emojiRegex = /[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]/gu;
     return emojiRegex.test(text);
@@ -114,12 +131,12 @@ function hasEmoji(text) {
 module.exports = {
     name: "stext",
     alias: ["stickertext", "stikerteks", "stextsquare"],
-    description: "Membuat stiker teks dinamis dengan emoji berwarna & rata kiri-kanan.",
+    description: "Membuat stiker teks kotak, justify, dan emoji warna.",
     category: "converter",
     execute: async (msg, { bot, args, usedPrefix, command }) => {
         const text = args.join(' ').trim();
         if (!text) {
-            return msg.reply(`Gunakan:\n*${usedPrefix + command} <teks>*\nContoh: ${usedPrefix + command} aku laper banget 😩`);
+            return msg.reply(`Gunakan: *${usedPrefix + command} <teks>*\nContoh: ${usedPrefix + command} bangun pagi ☕`);
         }
 
         if (text.length > 120) {
@@ -128,18 +145,18 @@ module.exports = {
 
         try {
             await msg.react("🎨");
-            console.log(`🖼️ Membuat stiker dari: "${text}"`);
+            console.log(`🖼️ Membuat stiker: "${text}"`);
 
             let imageBuffer;
             try {
                 imageBuffer = await generateImageWithPuppeteer(text);
             } catch (err) {
                 console.error("❌ Puppeteer error:", err);
-                return msg.reply("⚠️ Gagal membuat stiker. Pastikan Puppeteer & Chromium terinstal dengan benar.");
+                return msg.reply("⚠️ Puppeteer gagal. Pastikan puppeteer & Chromium terinstal.");
             }
 
             const sticker = new Sticker(imageBuffer, {
-                pack: process.env.stickerPackname || 'Dynamic Text',
+                pack: process.env.stickerPackname || 'Square Text',
                 author: process.env.stickerAuthor || 'Bot',
                 type: StickerTypes.FULL,
                 quality: 90,
@@ -151,7 +168,7 @@ module.exports = {
         } catch (error) {
             console.error("❌ Error:", error);
             await msg.react("❌");
-            msg.reply(`❌ Terjadi kesalahan:\n${error.message}`);
+            msg.reply(`❌ Gagal membuat stiker:\n${error.message}`);
         }
     }
 };
