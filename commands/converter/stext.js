@@ -5,18 +5,16 @@ const { Sticker, StickerTypes } = require('wa-sticker-formatter');
 function formatText(text) {
     const words = text.trim().split(/\s+/);
     const lines = [];
-    let i = 0;
-    while (i < words.length) {
-        const remaining = words.length - i;
-        if (remaining === 1) {
-            lines.push(words[i]);
-            break;
-        } else if (remaining === 2) {
-            lines.push(words.slice(i, i + 2).join(' '));
-            break;
-        } else {
-            lines.push(words.slice(i, i + 3).join(' '));
-            i += 3;
+    let currentLine = [];
+
+    for (let i = 0; i < words.length; i++) {
+        currentLine.push(words[i]);
+        const isLastWord = i === words.length - 1;
+        const isNextLine = currentLine.length >= 3 || (currentLine.length === 2 && isLastWord);
+
+        if (isNextLine || isLastWord) {
+            lines.push(currentLine.join(' '));
+            currentLine = [];
         }
     }
     return lines;
@@ -31,7 +29,7 @@ function escapeHtml(text) {
                .replace(/'/g, '&#39;');
 }
 
-// Puppeteer untuk emoji dan teks justify
+// Puppeteer untuk layout rapi & emoji warna
 async function generateImageWithPuppeteer(text) {
     const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
@@ -40,7 +38,7 @@ async function generateImageWithPuppeteer(text) {
     const lines = formatText(text);
     const lineCount = lines.length;
     const fontSize = lineCount > 6 ? 28 : lineCount > 4 ? 36 : 44;
-    const lineHeight = fontSize * 1.5;
+    const lineHeight = fontSize * 1.6;
 
     const html = `
     <html>
@@ -58,22 +56,27 @@ async function generateImageWithPuppeteer(text) {
             }
             .container {
                 width: 80%;
-                text-align: justify;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
                 font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
                 font-size: ${fontSize}px;
                 line-height: ${lineHeight}px;
                 color: #333;
             }
-            .container::after {
-                content: '';
-                display: inline-block;
-                width: 100%;
+            .line {
+                display: block;
+                text-align: justify;
+                text-justify: inter-word;
+            }
+            .line:last-child {
+                text-align: left;
             }
         </style>
     </head>
     <body>
         <div class="container">
-            ${lines.map(line => escapeHtml(line)).join('<br>')}
+            ${lines.map(line => `<span class="line">${escapeHtml(line)}</span>`).join('\n')}
         </div>
     </body>
     </html>`;
@@ -97,12 +100,12 @@ function hasEmoji(text) {
 module.exports = {
     name: "stext",
     alias: ["stickertext", "stikerteks", "stextsquare"],
-    description: "Membuat stiker teks kotak dengan emoji warna & justify.",
+    description: "Membuat stiker teks justify & emoji berwarna.",
     category: "converter",
     execute: async (msg, { bot, args, usedPrefix, command }) => {
         const text = args.join(' ').trim();
         if (!text) {
-            return msg.reply(`Kirim perintah dengan format:\n*${usedPrefix + command} <teks kamu>*\n\nContoh: ${usedPrefix + command} Bentar ma'em dlu 😋`);
+            return msg.reply(`Gunakan perintah:\n*${usedPrefix + command} <teks>*\nContoh: ${usedPrefix + command} yaudah si 😭`);
         }
 
         if (text.length > 100) {
@@ -111,18 +114,18 @@ module.exports = {
 
         try {
             await msg.react("🎨");
-            console.log(`🎭 Membuat stiker dari teks: "${text}"`);
+            console.log(`🎭 Proses stiker teks: "${text}"`);
 
             let imageBuffer;
             try {
                 imageBuffer = await generateImageWithPuppeteer(text);
-            } catch (error) {
-                console.error("❌ Puppeteer gagal:", error);
-                return msg.reply("⚠️ Gagal membuat stiker (puppeteer error). Pastikan puppeteer terinstall dan Chromium bisa dijalankan.");
+            } catch (err) {
+                console.error("❌ Puppeteer gagal:", err);
+                return msg.reply("⚠️ Gagal membuat stiker (puppeteer error). Pastikan puppeteer & Chromium terinstal.");
             }
 
             const sticker = new Sticker(imageBuffer, {
-                pack: process.env.stickerPackname || 'Emoji Text Pack',
+                pack: process.env.stickerPackname || 'Text Justify Pack',
                 author: process.env.stickerAuthor || 'Bot',
                 type: StickerTypes.FULL,
                 quality: 90,
@@ -132,7 +135,7 @@ module.exports = {
             await bot.sendMessage(msg.from, stickerBuffer, { quoted: msg });
             await msg.react("✅");
         } catch (error) {
-            console.error("❌ Gagal membuat stiker:", error);
+            console.error("❌ Error:", error);
             await msg.react("❌");
             msg.reply(`❌ Terjadi kesalahan:\n${error.message}`);
         }
