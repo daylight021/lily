@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const puppeteer = require('puppeteer');
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
 const fontsDir = path.join(__dirname, '../../lib/fonts');
 
@@ -41,14 +42,13 @@ function escapeHtml(text) {
                .replace(/'/g, '&#39;');
 }
 
-async function generateFontPreviewImage() {
+async function generateFontPreviewImagePuppeteer() {
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    const page = await browser.newPage();
     const fonts = listAvailableFonts();
-    const svgParts = [];
-    const previewText = 'ABC abc 123';
-    const rowHeight = 120;
-    const width = 1000;
-    let y = 0;
-    let defs = '';
+
+    let fontStyles = '';
+    let htmlBody = '';
 
     for (const font of fonts) {
         const fontPath = path.join(fontsDir, font.file);
@@ -57,68 +57,17 @@ async function generateFontPreviewImage() {
         const ext = font.file.endsWith('.otf') ? 'opentype' : 'truetype';
         const fontId = `font_${font.name.replace(/[^a-z0-9]/gi, '_')}`;
 
-        defs += `
+        fontStyles += `
         @font-face {
             font-family: '${fontId}';
             src: url(data:font/${ext};charset=utf-8;base64,${fontBase64}) format('${ext}');
-        }
-        .f-${fontId} {
-            font-family: '${fontId}';
-            font-size: 38px;
-        }
-        .label-${fontId} {
-            font-size: 22px;
-            fill: #666;
         }`;
 
-        svgParts.push(`
-        <text x="50" y="${y + 30}" class="label-${fontId}">${font.name}</text>
-        <text x="50" y="${y + 90}" class="f-${fontId}">${escapeHtml(previewText)}</text>
-        `);
-
-        y += rowHeight;
-    }
-
-    const height = y + 20;
-
-    const svg = `
-    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <style>${defs}</style>
-    ${svgParts.join('\n')}
-    </svg>`;
-
-    return await sharp(Buffer.from(svg))
-        .flatten({ background: { r: 255, g: 255, b: 255 } })
-        .png()
-        .toBuffer();
-}
-
-const puppeteer = require('puppeteer');
-
-async function generateImageWithPuppeteer(text, fontName, transparent = false) {
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
-    const page = await browser.newPage();
-
-    const lines = formatText(text);
-    const lineCount = lines.length;
-    const fontSize = lineCount > 6 ? 28 : lineCount > 4 ? 36 : 44;
-    const lineHeight = fontSize * 1.6;
-
-    const fonts = listAvailableFonts();
-    const matchedFont = fonts.find(f => f.name === fontName?.toLowerCase());
-    let fontFaceCSS = '';
-    let fontFamily = 'DefaultEmojiFont';
-
-    if (matchedFont) {
-        const fontBuffer = fs.readFileSync(path.join(fontsDir, matchedFont.file));
-        const fontBase64 = fontBuffer.toString('base64');
-        const ext = matchedFont.file.endsWith('.otf') ? 'opentype' : 'truetype';
-        fontFamily = 'CustomFont';
-        fontFaceCSS = `
-        @font-face {
-            font-family: '${fontFamily}';
-            src: url(data:font/${ext};charset=utf-8;base64,${fontBase64}) format('${ext}');
-        }`;
+        htmlBody += `
+        <div class="item">
+            <div class="label">Nama Font: ${font.name}</div>
+            <div class="preview" style="font-family: '${fontId}'">Preview: ${font.name} ABC abc 123 😁✨</div>
+        </div>`;
     }
 
     const html = `
@@ -126,78 +75,43 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
     <head>
         <meta charset="utf-8">
         <style>
-            ${fontFaceCSS}
-            html, body {
+            ${fontStyles}
+            body {
+                background: white;
                 margin: 0;
-                background: ${transparent ? 'transparent' : 'white'};
-                padding: 0;
-                font-family: '${fontFamily}', "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
+                font-family: sans-serif;
+                padding: 30px;
             }
-            .container {
-                display: inline-block;
-                padding: 40px;
-                text-align: justify;
-                font-size: ${fontSize}px;
-                line-height: ${lineHeight}px;
-                color: ${transparent ? '#fff' : '#333'};
-                -webkit-text-stroke: ${transparent ? '1px black' : 'none'};
-                text-shadow: ${transparent ? '0 0 2px black' : 'none'};
-                word-wrap: break-word;
-                text-justify: inter-word;
-                max-width: 800px;
+            .item {
+                margin-bottom: 40px;
             }
-            .container::after {
-                content: '';
-                display: inline-block;
-                width: 100%;
+            .label {
+                font-size: 20px;
+                color: #444;
+                margin-bottom: 8px;
             }
-            .line {
-                display: block;
-                text-align: justify;
-                text-justify: inter-word;
-                word-wrap: break-word;
-            }
-            .line:last-child {
-                text-align: left !important;
+            .preview {
+                font-size: 36px;
+                line-height: 1.4;
+                color: #000;
             }
         </style>
     </head>
     <body>
-        <div class="container" id="capture">
-            ${lines.map(line => `<span class="line">${escapeHtml(line)}</span>`).join('\n')}
-        </div>
+        ${htmlBody}
     </body>
     </html>`;
 
     await page.setContent(html);
-    const element = await page.$('#capture');
-    const bbox = await element.boundingBox();
-
-    const screenshot = await page.screenshot({
-        type: 'png',
-        omitBackground: transparent,
-        clip: {
-            x: Math.floor(bbox.x),
-            y: Math.floor(bbox.y),
-            width: Math.ceil(bbox.width),
-            height: Math.ceil(bbox.height)
-        }
+    const clip = await page.evaluate(() => {
+        const body = document.body;
+        const { width, height } = body.getBoundingClientRect();
+        return { x: 0, y: 0, width: Math.ceil(width), height: Math.ceil(height) };
     });
 
+    const buffer = await page.screenshot({ clip, omitBackground: false });
     await browser.close();
-
-    const size = Math.max(bbox.width, bbox.height);
-    const padX = Math.floor((size - bbox.width) / 2);
-    const padY = Math.floor((size - bbox.height) / 2);
-
-    return await sharp({
-        create: {
-            width: Math.ceil(size),
-            height: Math.ceil(size),
-            channels: 4,
-            background: transparent ? { r: 0, g: 0, b: 0, alpha: 0 } : { r: 255, g: 255, b: 255, alpha: 1 }
-        }
-    }).composite([{ input: screenshot, left: padX, top: padY }]).png().toBuffer();
+    return buffer;
 }
 
 module.exports = {
@@ -209,17 +123,17 @@ module.exports = {
         const input = args.join(' ').trim();
 
         if (!input) {
-            return msg.reply(`Gunakan:\n*${usedPrefix + command} [-t] [-nama_font] <teks>*\n\nContoh:\n${usedPrefix + command} -t -raleway-heavy makan dulu 😋`);
+            return msg.reply(`Gunakan:\n*${usedPrefix + command} [-t] [-nama_font] <teks>*\n\nContoh:\n${usedPrefix + command} -t -raleway-bold makan dulu 😋`);
         }
 
         if (input === '-font') {
             const fonts = listAvailableFonts();
             if (fonts.length === 0) return msg.reply('❌ Tidak ada font ditemukan di folder assets/fonts.');
             await msg.reply('📸 Menghasilkan preview semua font...');
-            const buffer = await generateFontPreviewImage();
+            const buffer = await generateFontPreviewImagePuppeteer();
             return bot.sendMessage(msg.from, {
                 image: buffer,
-                caption: `📚 *Preview Font Tersedia*\n\nGunakan: *.stext -nama_font teks*\nContoh: *.stext -raleway-heavy halo dunia*`
+                caption: `📚 *Preview Font Tersedia*\n\nGunakan: *.stext -nama_font teks*\nContoh: *.stext -raleway-bold halo dunia*`
             }, { quoted: msg });
         }
 
