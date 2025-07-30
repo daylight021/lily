@@ -1,36 +1,40 @@
+const fs = require('fs');
+const path = require('path');
 const sharp = require('sharp');
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
+const availableFontsDir = path.join(__dirname, '../../lib/fonts');
 
-// Fungsi untuk menyusun teks sesuai aturan baru
+// Ambil daftar font dari folder assets/fonts
+function listAvailableFonts() {
+    if (!fs.existsSync(availableFontsDir)) return [];
+    return fs.readdirSync(availableFontsDir)
+        .filter(file => /\.(ttf|otf)$/i.test(file))
+        .map(file => {
+            const name = path.parse(file).name.replace(/[-_]?Regular$/i, '');
+            return { name: name.toLowerCase(), file };
+        });
+}
+
+// Format teks jadi 2–3 per baris dengan logika ganjil/vertikal
 function formatText(text) {
     const words = text.trim().split(/\s+/);
     const total = words.length;
-
-    if (total <= 3) return words; // susun vertikal satu per baris
-
+    if (total <= 3) return words;
     const lines = [];
     let i = 0;
-
     const isOdd = total % 2 === 1 || total % 3 === 1;
     const lastWordAlone = isOdd && total >= 5;
-
     const limit = lastWordAlone ? total - 1 : total;
-
     while (i < limit) {
         const remaining = limit - i;
         const take = remaining >= 3 ? 3 : 2;
         lines.push(words.slice(i, i + take).join(' '));
         i += take;
     }
-
-    if (lastWordAlone) {
-        lines.push(words[words.length - 1]); // kata terakhir di baris sendiri
-    }
-
+    if (lastWordAlone) lines.push(words[words.length - 1]);
     return lines;
 }
 
-// Escape karakter HTML
 function escapeHtml(text) {
     return text.replace(/&/g, '&amp;')
                .replace(/</g, '&lt;')
@@ -39,8 +43,7 @@ function escapeHtml(text) {
                .replace(/'/g, '&#39;');
 }
 
-// Fungsi render teks menjadi gambar kotak + padding
-async function generateImageWithPuppeteer(text) {
+async function generateImageWithPuppeteer(text, fontName, transparent = false) {
     const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
     const page = await browser.newPage();
@@ -50,6 +53,14 @@ async function generateImageWithPuppeteer(text) {
     const fontSize = lineCount > 6 ? 28 : lineCount > 4 ? 36 : 44;
     const lineHeight = fontSize * 1.6;
 
+    const fontPath = listAvailableFonts().find(f => f.name === fontName?.toLowerCase());
+    if (fontPath) {
+        await page.evaluateOnNewDocument((family, path) => {
+            const font = new FontFace(family, `url("file://${path}")`);
+            font.load().then(() => document.fonts.add(font));
+        }, fontPath.name, path.join(availableFontsDir, fontPath.file));
+    }
+
     const html = `
     <html>
     <head>
@@ -57,9 +68,9 @@ async function generateImageWithPuppeteer(text) {
         <style>
             html, body {
                 margin: 0;
-                background: white;
+                background: ${transparent ? 'transparent' : 'white'};
                 padding: 0;
-                font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
+                font-family: "${fontPath?.name || 'Noto Color Emoji'}, Segoe UI Emoji, Apple Color Emoji, sans-serif";
             }
             .container {
                 display: inline-block;
@@ -101,12 +112,12 @@ async function generateImageWithPuppeteer(text) {
 
     const screenshot = await page.screenshot({
         type: 'png',
-        omitBackground: false,
+        omitBackground: transparent,
         clip: {
             x: Math.floor(bbox.x),
             y: Math.floor(bbox.y),
             width: Math.ceil(bbox.width),
-            height: Math.ceil(bbox.height),
+            height: Math.ceil(bbox.height)
         }
     });
 
@@ -116,56 +127,57 @@ async function generateImageWithPuppeteer(text) {
     const padX = Math.floor((size - bbox.width) / 2);
     const padY = Math.floor((size - bbox.height) / 2);
 
-    const paddedImage = await sharp({
+    return await sharp({
         create: {
             width: Math.ceil(size),
             height: Math.ceil(size),
             channels: 4,
-            background: { r: 255, g: 255, b: 255, alpha: 1 }
+            background: transparent ? { r: 0, g: 0, b: 0, alpha: 0 } : { r: 255, g: 255, b: 255, alpha: 1 }
         }
-    })
-    .composite([{ input: screenshot, left: padX, top: padY }])
-    .png()
-    .toBuffer();
-
-    return paddedImage;
-}
-
-// Deteksi apakah mengandung emoji
-function hasEmoji(text) {
-    const emojiRegex = /[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]/gu;
-    return emojiRegex.test(text);
+    }).composite([{ input: screenshot, left: padX, top: padY }]).png().toBuffer();
 }
 
 module.exports = {
     name: "stext",
-    alias: ["stickertext", "stikerteks", "stextsquare"],
-    description: "Membuat stiker teks kotak dengan emoji warna dan logika baris pintar.",
+    alias: ["stickertext", "stikerteks"],
+    description: "Buat stiker teks kotak dengan emoji warna, transparansi, dan font kustom.",
     category: "converter",
     execute: async (msg, { bot, args, usedPrefix, command }) => {
-        const text = args.join(' ').trim();
-        if (!text) {
-            return msg.reply(`Gunakan: *${usedPrefix + command} <teks>*\nContoh: ${usedPrefix + command} makan dulu ah 🍜`);
+        const argString = args.join(' ').trim();
+        if (!argString) {
+            return msg.reply(`Gunakan:\n*${usedPrefix + command} [-t] [-nama_font] <teks>*\n\nContoh:\n${usedPrefix + command} -t -raleway makan dulu 😋`);
         }
 
-        if (text.length > 120) {
-            return msg.reply('❌ Teks terlalu panjang! Maksimal 120 karakter.');
+        if (argString === '-font') {
+            const fontList = listAvailableFonts();
+            if (fontList.length === 0) return msg.reply('❌ Tidak ada font ditemukan di folder assets/fonts.');
+
+            let fontPreview = '*📚 Font Tersedia:*\n\n';
+            fontList.forEach(f => {
+                fontPreview += `- *${f.name}*: Gunakan dengan \`-` + f.name + `\`\n`;
+            });
+
+            return msg.reply(fontPreview);
         }
+
+        const matchFlags = argString.match(/(?:^|\s)-([a-z0-9]+)/gi) || [];
+        const flags = matchFlags.map(f => f.trim().slice(1).toLowerCase());
+        const text = argString.replace(/(?:^|\s)-([a-z0-9]+)/gi, '').trim();
+
+        if (!text) return msg.reply('❌ Teks kosong setelah menghapus parameter.');
+
+        const isTransparent = flags.includes('t');
+        const fontArg = flags.find(f => f !== 't');
+        const fontList = listAvailableFonts().map(f => f.name);
+        const chosenFont = fontList.includes(fontArg) ? fontArg : null;
 
         try {
             await msg.react("🎨");
-            console.log(`🖼️ Membuat stiker dari teks: "${text}"`);
 
-            let imageBuffer;
-            try {
-                imageBuffer = await generateImageWithPuppeteer(text);
-            } catch (err) {
-                console.error("❌ Puppeteer error:", err);
-                return msg.reply("⚠️ Gagal membuat stiker. Pastikan puppeteer & Chromium terinstal.");
-            }
+            const imageBuffer = await generateImageWithPuppeteer(text, chosenFont, isTransparent);
 
             const sticker = new Sticker(imageBuffer, {
-                pack: process.env.stickerPackname || 'Smart Text',
+                pack: process.env.stickerPackname || 'Text Sticker',
                 author: process.env.stickerAuthor || 'Bot',
                 type: StickerTypes.FULL,
                 quality: 90,
@@ -177,7 +189,7 @@ module.exports = {
         } catch (error) {
             console.error("❌ Error:", error);
             await msg.react("❌");
-            msg.reply(`❌ Terjadi kesalahan:\n${error.message}`);
+            msg.reply(`❌ Gagal membuat stiker:\n${error.message}`);
         }
     }
 };
