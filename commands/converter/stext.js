@@ -41,6 +41,55 @@ function escapeHtml(text) {
                .replace(/'/g, '&#39;');
 }
 
+// PREVIEW ALL FONTS INTO ONE IMAGE
+async function generateFontPreviewImage() {
+    const fonts = listAvailableFonts();
+    const svgParts = [];
+    const rowHeight = 120;
+    const width = 1000;
+    const previewText = 'ABC abc 123 😁✨';
+    let y = 0;
+
+    for (const font of fonts) {
+        const fontPath = path.join(fontsDir, font.file);
+        const fontBuffer = fs.readFileSync(fontPath);
+        const fontBase64 = fontBuffer.toString('base64');
+        const ext = font.file.endsWith('.otf') ? 'opentype' : 'truetype';
+        const fontId = `font_${font.name.replace(/[^a-z0-9]/gi, '_')}`;
+
+        svgParts.push(`
+        <style>
+        @font-face {
+            font-family: '${fontId}';
+            src: url(data:font/${ext};charset=utf-8;base64,${fontBase64}) format('${ext}');
+        }
+        .f-${fontId} {
+            font-family: '${fontId}';
+            font-size: 38px;
+        }
+        .label {
+            font-size: 22px;
+            fill: #888;
+        }
+        </style>
+        <text x="50" y="${y + 30}" class="label">${font.name}</text>
+        <text x="50" y="${y + 90}" class="f-${fontId}">${escapeHtml(previewText)}</text>
+        `);
+
+        y += rowHeight;
+    }
+
+    const height = y + 20;
+
+    const svg = `
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    ${svgParts.join('\n')}
+    </svg>`;
+
+    return await sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// MAIN IMAGE GENERATOR
 async function generateImageWithPuppeteer(text, fontName, transparent = false) {
     const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
@@ -61,13 +110,10 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
         const fontBase64 = fontBuffer.toString('base64');
         const ext = matchedFont.file.endsWith('.otf') ? 'opentype' : 'truetype';
         fontFamily = 'CustomFont';
-
         fontFaceCSS = `
         @font-face {
             font-family: '${fontFamily}';
             src: url(data:font/${ext};charset=utf-8;base64,${fontBase64}) format('${ext}');
-            font-weight: normal;
-            font-style: normal;
         }`;
     }
 
@@ -153,10 +199,11 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
 module.exports = {
     name: "stext",
     alias: ["stickertext", "stikerteks"],
-    description: "Buat stiker teks kotak dengan emoji warna, background transparan, dan font kustom.",
+    description: "Buat stiker teks atau lihat daftar font",
     category: "converter",
     execute: async (msg, { bot, args, usedPrefix, command }) => {
         const input = args.join(' ').trim();
+
         if (!input) {
             return msg.reply(`Gunakan:\n*${usedPrefix + command} [-t] [-nama_font] <teks>*\n\nContoh:\n${usedPrefix + command} -t -raleway-heavy makan dulu 😋`);
         }
@@ -164,11 +211,12 @@ module.exports = {
         if (input === '-font') {
             const fonts = listAvailableFonts();
             if (fonts.length === 0) return msg.reply('❌ Tidak ada font ditemukan di folder assets/fonts.');
-            let reply = '*📚 Font Tersedia:*\n\n';
-            fonts.forEach(f => {
-                reply += `- *${f.name}*: Gunakan dengan \`-${f.name}\`\n`;
-            });
-            return msg.reply(reply);
+            await msg.reply('📸 Menghasilkan preview semua font...');
+            const buffer = await generateFontPreviewImage();
+            return bot.sendMessage(msg.from, {
+                image: buffer,
+                caption: `📚 *Preview Font Tersedia*\n\nGunakan: *.stext -nama_font teks*\nContoh: *.stext -raleway-heavy halo dunia*`
+            }, { quoted: msg });
         }
 
         const flags = [];
