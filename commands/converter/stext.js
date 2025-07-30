@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
-const fontsDir = path.join(__dirname, '../assets/fonts');
+const fontsDir = path.join(__dirname, '../../lib/fonts');
 
 function listAvailableFonts() {
     if (!fs.existsSync(fontsDir)) return [];
@@ -54,13 +54,20 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
     const fonts = listAvailableFonts();
     const matchedFont = fonts.find(f => f.name === fontName?.toLowerCase());
     let fontFaceCSS = '';
+    let fontFamily = 'DefaultEmojiFont';
 
     if (matchedFont) {
-        const fontPath = `file://${path.join(fontsDir, matchedFont.file)}`;
+        const fontBuffer = fs.readFileSync(path.join(fontsDir, matchedFont.file));
+        const fontBase64 = fontBuffer.toString('base64');
+        const ext = matchedFont.file.endsWith('.otf') ? 'opentype' : 'truetype';
+        fontFamily = 'CustomFont';
+
         fontFaceCSS = `
         @font-face {
-            font-family: 'CustomFont';
-            src: url('${fontPath}');
+            font-family: '${fontFamily}';
+            src: url(data:font/${ext};charset=utf-8;base64,${fontBase64}) format('${ext}');
+            font-weight: normal;
+            font-style: normal;
         }`;
     }
 
@@ -74,7 +81,7 @@ async function generateImageWithPuppeteer(text, fontName, transparent = false) {
                 margin: 0;
                 background: ${transparent ? 'transparent' : 'white'};
                 padding: 0;
-                font-family: ${matchedFont ? 'CustomFont' : '"Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif'};
+                font-family: '${fontFamily}', "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
             }
             .container {
                 display: inline-block;
@@ -164,7 +171,6 @@ module.exports = {
             return msg.reply(reply);
         }
 
-        // Deteksi flag (diawali tanda minus)
         const flags = [];
         const words = input.trim().split(/\s+/);
         const contentWords = [];
