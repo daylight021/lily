@@ -1,26 +1,36 @@
 const sharp = require('sharp');
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
 
-// Bagi teks jadi 2–3 kata per baris
+// Fungsi untuk menyusun teks sesuai aturan baru
 function formatText(text) {
     const words = text.trim().split(/\s+/);
+    const total = words.length;
+
+    if (total <= 3) return words; // susun vertikal satu per baris
+
     const lines = [];
-    let currentLine = [];
+    let i = 0;
 
-    for (let i = 0; i < words.length; i++) {
-        currentLine.push(words[i]);
-        const isLastWord = i === words.length - 1;
-        const isNextLine = currentLine.length >= 3 || (currentLine.length === 2 && isLastWord);
+    const isOdd = total % 2 === 1 || total % 3 === 1;
+    const lastWordAlone = isOdd && total >= 5;
 
-        if (isNextLine || isLastWord) {
-            lines.push(currentLine.join(' '));
-            currentLine = [];
-        }
+    const limit = lastWordAlone ? total - 1 : total;
+
+    while (i < limit) {
+        const remaining = limit - i;
+        const take = remaining >= 3 ? 3 : 2;
+        lines.push(words.slice(i, i + take).join(' '));
+        i += take;
     }
+
+    if (lastWordAlone) {
+        lines.push(words[words.length - 1]); // kata terakhir di baris sendiri
+    }
+
     return lines;
 }
 
-// Escape HTML untuk emoji & simbol
+// Escape karakter HTML
 function escapeHtml(text) {
     return text.replace(/&/g, '&amp;')
                .replace(/</g, '&lt;')
@@ -29,7 +39,7 @@ function escapeHtml(text) {
                .replace(/'/g, '&#39;');
 }
 
-// Render HTML + buat gambar kotak dengan padding
+// Fungsi render teks menjadi gambar kotak + padding
 async function generateImageWithPuppeteer(text) {
     const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
@@ -74,7 +84,7 @@ async function generateImageWithPuppeteer(text) {
                 word-wrap: break-word;
             }
             .line:last-child {
-                text-align: left;
+                text-align: left !important;
             }
         </style>
     </head>
@@ -102,7 +112,6 @@ async function generateImageWithPuppeteer(text) {
 
     await browser.close();
 
-    // Buat stiker jadi persegi dengan padding putih
     const size = Math.max(bbox.width, bbox.height);
     const padX = Math.floor((size - bbox.width) / 2);
     const padY = Math.floor((size - bbox.height) / 2);
@@ -122,7 +131,7 @@ async function generateImageWithPuppeteer(text) {
     return paddedImage;
 }
 
-// Deteksi emoji
+// Deteksi apakah mengandung emoji
 function hasEmoji(text) {
     const emojiRegex = /[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]/gu;
     return emojiRegex.test(text);
@@ -131,12 +140,12 @@ function hasEmoji(text) {
 module.exports = {
     name: "stext",
     alias: ["stickertext", "stikerteks", "stextsquare"],
-    description: "Membuat stiker teks kotak, justify, dan emoji warna.",
+    description: "Membuat stiker teks kotak dengan emoji warna dan logika baris pintar.",
     category: "converter",
     execute: async (msg, { bot, args, usedPrefix, command }) => {
         const text = args.join(' ').trim();
         if (!text) {
-            return msg.reply(`Gunakan: *${usedPrefix + command} <teks>*\nContoh: ${usedPrefix + command} bangun pagi ☕`);
+            return msg.reply(`Gunakan: *${usedPrefix + command} <teks>*\nContoh: ${usedPrefix + command} makan dulu ah 🍜`);
         }
 
         if (text.length > 120) {
@@ -145,18 +154,18 @@ module.exports = {
 
         try {
             await msg.react("🎨");
-            console.log(`🖼️ Membuat stiker: "${text}"`);
+            console.log(`🖼️ Membuat stiker dari teks: "${text}"`);
 
             let imageBuffer;
             try {
                 imageBuffer = await generateImageWithPuppeteer(text);
             } catch (err) {
                 console.error("❌ Puppeteer error:", err);
-                return msg.reply("⚠️ Puppeteer gagal. Pastikan puppeteer & Chromium terinstal.");
+                return msg.reply("⚠️ Gagal membuat stiker. Pastikan puppeteer & Chromium terinstal.");
             }
 
             const sticker = new Sticker(imageBuffer, {
-                pack: process.env.stickerPackname || 'Square Text',
+                pack: process.env.stickerPackname || 'Smart Text',
                 author: process.env.stickerAuthor || 'Bot',
                 type: StickerTypes.FULL,
                 quality: 90,
@@ -168,7 +177,7 @@ module.exports = {
         } catch (error) {
             console.error("❌ Error:", error);
             await msg.react("❌");
-            msg.reply(`❌ Gagal membuat stiker:\n${error.message}`);
+            msg.reply(`❌ Terjadi kesalahan:\n${error.message}`);
         }
     }
 };
