@@ -6,14 +6,17 @@ const { downloadMediaMessage } = require('lily-baileys');
  * Multiple API endpoints untuk enhance gambar
  */
 const ENHANCE_APIS = {
+    waifu2x_org: {
+        url: 'https://waifu2x.org/api',
+        method: 'waifu2x_org'
+    },
+    waifu2x_net: {
+        url: 'https://waifu2x.net/api/v1/upscale',
+        method: 'waifu2x_net'
+    },
     revesery: {
         url: 'https://tools.revesery.com/remini/remini.php',
         method: 'revesery'
-    },
-    // Tambahkan API alternatif lain jika diperlukan
-    alternative: {
-        url: 'https://api.sdbhav.online/enhance',
-        method: 'alternative'
     }
 };
 
@@ -126,26 +129,111 @@ async function enhanceWithRevesery(imageBuffer) {
 }
 
 /**
- * Fungsi untuk enhance dengan API alternatif
+ * Fungsi untuk enhance dengan Waifu2x.org API
  */
-async function enhanceWithAlternative(imageBuffer) {
+async function enhanceWithWaifu2xOrg(imageBuffer) {
     return new Promise(async (resolve, reject) => {
         try {
-            console.log('🔄 Mencoba API alternatif...');
+            console.log('🔄 Mencoba Waifu2x.org API...');
             
-            // Implementasi API alternatif bisa ditambahkan di sini
-            // Untuk sementara, kita akan return gambar asli sebagai fallback
+            const form = new FormData();
+            form.append('file', imageBuffer, {
+                filename: 'enhance.jpg',
+                contentType: 'image/jpeg'
+            });
+            form.append('scale', '2'); // 2x upscale
+            form.append('noise', '1'); // noise reduction level
             
-            console.log('⚠️ API alternatif belum diimplementasi, menggunakan fallback');
+            const response = await axios.post('https://waifu2x.org/api', form, {
+                headers: {
+                    ...form.getHeaders(),
+                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+                    'Accept': 'application/json',
+                    'Referer': 'https://waifu2x.org/'
+                },
+                timeout: 120000
+            });
             
-            // Simulasi delay processing
-            await new Promise(res => setTimeout(res, 3000));
-            
-            // Return buffer asli (sebagai fallback)
-            resolve(imageBuffer);
+            if (response.data && response.data.url) {
+                const imageResponse = await axios.get(response.data.url, {
+                    responseType: 'arraybuffer',
+                    timeout: 60000
+                });
+                
+                const resultBuffer = Buffer.from(imageResponse.data);
+                console.log(`✅ Waifu2x.org berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+                resolve(resultBuffer);
+            } else {
+                throw new Error('Waifu2x.org response tidak valid');
+            }
             
         } catch (error) {
-            console.error('❌ Error API alternatif:', error.message);
+            console.error('❌ Error Waifu2x.org:', error.message);
+            reject(error);
+        }
+    });
+}
+
+/**
+ * Fungsi untuk enhance dengan API alternatif menggunakan upscaling sederhana
+ */
+async function enhanceWithSimpleUpscale(imageBuffer) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            console.log('🔄 Menggunakan simple upscale fallback...');
+            
+            // Coba menggunakan API publik lain yang available
+            const form = new FormData();
+            form.append('image', imageBuffer, {
+                filename: 'image.jpg',
+                contentType: 'image/jpeg'
+            });
+            
+            // Coba API waifu2x publik yang lain
+            const publicApis = [
+                'https://api.waifu2x.cc/upscale',
+                'https://waifu2x.pro/api/upscale'
+            ];
+            
+            for (const apiUrl of publicApis) {
+                try {
+                    console.log(`📡 Trying ${apiUrl}...`);
+                    
+                    const response = await axios.post(apiUrl, form, {
+                        headers: {
+                            ...form.getHeaders(),
+                            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+                        },
+                        timeout: 90000
+                    });
+                    
+                    if (response.data && (response.data.url || response.data.result_url)) {
+                        const imageUrl = response.data.url || response.data.result_url;
+                        const imageResponse = await axios.get(imageUrl, {
+                            responseType: 'arraybuffer',
+                            timeout: 60000
+                        });
+                        
+                        const resultBuffer = Buffer.from(imageResponse.data);
+                        
+                        // Cek apakah hasilnya benar-benar berbeda (minimal 10% lebih besar)
+                        if (resultBuffer.length > imageBuffer.length * 1.1) {
+                            console.log(`✅ Enhancement berhasil via ${apiUrl}: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+                            resolve(resultBuffer);
+                            return;
+                        }
+                    }
+                } catch (apiError) {
+                    console.log(`❌ ${apiUrl} failed:`, apiError.message);
+                    continue;
+                }
+            }
+            
+            // Jika semua API gagal, return error instead of original image
+            throw new Error('Semua API enhancement tidak tersedia atau tidak memberikan hasil yang valid');
+            
+        } catch (error) {
+            console.error('❌ Error Simple Upscale:', error.message);
             reject(error);
         }
     });
@@ -270,7 +358,7 @@ async function downloadMediaWithRetry(quotedMessage, maxRetries = 3) {
 }
 
 /**
- * Fungsi utama untuk enhance gambar dengan fallback
+ * Fungsi utama untuk enhance gambar dengan multiple API fallback
  */
 async function processImageEnhancement(imageBuffer) {
     console.log('🎯 Memulai proses enhancement...');
@@ -278,22 +366,46 @@ async function processImageEnhancement(imageBuffer) {
     // Validasi gambar
     const validation = validateImageBuffer(imageBuffer);
     
-    // Coba Revesery API terlebih dahulu
-    try {
-        console.log('🚀 Mencoba Revesery API...');
-        return await enhanceWithRevesery(imageBuffer);
-    } catch (reveseryError) {
-        console.log('⚠️ Revesery gagal:', reveseryError.message);
-        
-        // Fallback ke API alternatif
+    // Priority order API calls
+    const apiSequence = [
+        { name: 'Waifu2x.org', func: enhanceWithWaifu2xOrg },
+        { name: 'Simple Upscale', func: enhanceWithSimpleUpscale },
+        { name: 'Revesery', func: enhanceWithRevesery }
+    ];
+    
+    let lastError = null;
+    
+    for (const api of apiSequence) {
         try {
-            console.log('🔄 Beralih ke API alternatif...');
-            return await enhanceWithAlternative(imageBuffer);
-        } catch (altError) {
-            console.error('❌ Semua API gagal');
-            throw new Error(`Semua service enhancement gagal. Revesery: ${reveseryError.message}`);
+            console.log(`🚀 Mencoba ${api.name}...`);
+            const result = await api.func(imageBuffer);
+            
+            // Validasi hasil - pastikan benar-benar ada enhancement
+            if (result && result.length > 0) {
+                const sizeDifference = Math.abs(result.length - imageBuffer.length);
+                const sizeRatio = result.length / imageBuffer.length;
+                
+                // Cek apakah ada perubahan signifikan (minimal 5% difference atau 1.2x size)
+                if (sizeDifference > (imageBuffer.length * 0.05) || sizeRatio > 1.2 || sizeRatio < 0.8) {
+                    console.log(`✅ ${api.name} berhasil! Size ratio: ${sizeRatio.toFixed(2)}x`);
+                    return result;
+                } else {
+                    console.log(`⚠️ ${api.name} tidak memberikan enhancement yang signifikan`);
+                    lastError = new Error(`${api.name}: Tidak ada peningkatan kualitas yang terdeteksi`);
+                    continue;
+                }
+            }
+            
+        } catch (error) {
+            console.log(`❌ ${api.name} gagal:`, error.message);
+            lastError = error;
+            continue;
         }
     }
+    
+    // Jika semua API gagal, throw error instead of returning original
+    console.error('❌ Semua API enhancement gagal');
+    throw lastError || new Error('Semua service enhancement tidak tersedia atau tidak memberikan hasil yang valid');
 }
 
 module.exports = {
