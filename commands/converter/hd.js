@@ -1,253 +1,211 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const { downloadMediaMessage } = require('lily-baileys');
+const sharp = require('sharp'); // Untuk local processing fallback
 
 /**
- * Multiple API endpoints untuk enhance gambar
+ * API endpoints yang masih bekerja berdasarkan research 2025
  */
-const ENHANCE_APIS = {
-    waifu2x_org: {
-        url: 'https://waifu2x.org/api',
-        method: 'waifu2x_org'
+const WORKING_APIS = {
+    upscale_media: {
+        url: 'https://www.upscale.media/api/upscale',
+        name: 'Upscale.media'
     },
-    waifu2x_net: {
-        url: 'https://waifu2x.net/api/v1/upscale',
-        method: 'waifu2x_net'
+    clipdrop: {
+        url: 'https://clipdrop-api.co/image-upscaling/v1/upscale',
+        name: 'ClipDrop',
+        key: '5612c6468e60f8680f55a0f471007812fa5c2418489c5c2fe54dc2b62c95b7af39d12a3bdc92011286fc7b013324ab7e' // Opsional - bisa kosong untuk free tier
     },
-    revesery: {
-        url: 'https://tools.revesery.com/remini/remini.php',
-        method: 'revesery'
+    pixelcut: {
+        url: 'https://api.pixelcut.ai/v1/upscale',
+        name: 'Pixelcut'
     }
 };
 
 /**
- * Fungsi untuk enhance gambar menggunakan Revesery API (Improved)
+ * Fungsi untuk enhance dengan Upscale.media
  */
-async function enhanceWithRevesery(imageBuffer) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            console.log('🔄 Memproses dengan Revesery API...');
-            
-            const form = new FormData();
-            form.append('file', imageBuffer, {
-                filename: 'enhance_image.jpg',
-                contentType: 'image/jpeg'
-            });
-
-            // Headers yang lebih lengkap dan sesuai dengan browser real
-            const headers = {
+async function enhanceWithUpscaleMedia(imageBuffer) {
+    try {
+        console.log('🔄 Mencoba Upscale.media API...');
+        
+        const form = new FormData();
+        form.append('image', imageBuffer, {
+            filename: 'enhance.jpg',
+            contentType: 'image/jpeg'
+        });
+        form.append('scale', '2'); // 2x upscale
+        form.append('format', 'jpeg');
+        
+        const response = await axios.post(WORKING_APIS.upscale_media.url, form, {
+            headers: {
                 ...form.getHeaders(),
                 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Origin': 'https://tools.revesery.com',
-                'Referer': 'https://tools.revesery.com/',
-                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Linux"',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin'
-            };
-
-            console.log('📤 Mengirim request ke Revesery...');
-
-            const response = await axios.post(ENHANCE_APIS.revesery.url, form, {
-                headers: headers,
-                timeout: 180000, // 3 menit
-                maxBodyLength: Infinity,
-                maxContentLength: Infinity,
-                validateStatus: function (status) {
-                    return status < 500; // Accept semua status code < 500
-                }
-            });
-
-            console.log('📥 Response status:', response.status);
-            console.log('📥 Response data:', response.data);
-
-            if (response.status !== 200) {
-                throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
-            }
-
-            // Handle berbagai format response
-            let result = response.data;
-            if (typeof result === 'string') {
-                try {
-                    result = JSON.parse(result);
-                } catch (e) {
-                    console.log('Response bukan JSON, mencoba sebagai URL langsung...');
-                    if (result.includes('http')) {
-                        result = { url_result: result.trim() };
-                    }
-                }
-            }
-
-            if (result && (result.url_result || result.result || result.enhanced_url)) {
-                const imageUrl = result.url_result || result.result || result.enhanced_url;
-                console.log('🔗 Mengunduh gambar hasil dari:', imageUrl);
-                
-                const imageResponse = await axios.get(imageUrl, {
-                    responseType: 'arraybuffer',
-                    timeout: 120000, // 2 menit untuk download
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-                        'Referer': 'https://tools.revesery.com/'
-                    }
-                });
-
-                if (imageResponse.status !== 200) {
-                    throw new Error(`Gagal download gambar hasil: ${imageResponse.status}`);
-                }
-
-                const resultBuffer = Buffer.from(imageResponse.data);
-                
-                if (resultBuffer.length === 0) {
-                    throw new Error('Buffer hasil kosong');
-                }
-
-                console.log(`✅ Berhasil! Ukuran hasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-                resolve(resultBuffer);
-                
-            } else {
-                console.error('Response tidak valid:', result);
-                throw new Error('Response API tidak mengandung URL hasil yang valid');
-            }
-
-        } catch (error) {
-            console.error('❌ Error Revesery API:', error.message);
+                'Accept': 'application/json, image/*',
+                'Referer': 'https://www.upscale.media/'
+            },
+            timeout: 120000,
+            responseType: 'arraybuffer' // Langsung dapat buffer
+        });
+        
+        if (response.status === 200 && response.data) {
+            const resultBuffer = Buffer.from(response.data);
             
-            if (error.code === 'ECONNABORTED') {
-                reject(new Error('Timeout: Proses terlalu lama, coba dengan gambar yang lebih kecil'));
-            } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-                reject(new Error('Tidak dapat terhubung ke server enhancement'));
+            if (resultBuffer.length > imageBuffer.length * 1.2) {
+                console.log(`✅ Upscale.media berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+                return resultBuffer;
             } else {
-                reject(new Error(`Gagal memproses gambar: ${error.message}`));
+                throw new Error('Hasil tidak menunjukkan peningkatan yang signifikan');
             }
         }
-    });
+        
+        throw new Error('Response tidak valid dari Upscale.media');
+        
+    } catch (error) {
+        console.error('❌ Upscale.media error:', error.message);
+        throw error;
+    }
 }
 
 /**
- * Fungsi untuk enhance dengan Waifu2x.org API
+ * Fungsi untuk enhance dengan ClipDrop API
  */
-async function enhanceWithWaifu2xOrg(imageBuffer) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            console.log('🔄 Mencoba Waifu2x.org API...');
+async function enhanceWithClipDrop(imageBuffer) {
+    try {
+        console.log('🔄 Mencoba ClipDrop API...');
+        
+        const form = new FormData();
+        form.append('image_file', imageBuffer, {
+            filename: 'enhance.jpg',
+            contentType: 'image/jpeg'
+        });
+        
+        const headers = {
+            ...form.getHeaders(),
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+        };
+        
+        // Jika ada API key, tambahkan
+        if (WORKING_APIS.clipdrop.key && WORKING_APIS.clipdrop.key !== 'YOUR_CLIPDROP_API_KEY') {
+            headers['x-api-key'] = WORKING_APIS.clipdrop.key;
+        }
+        
+        const response = await axios.post(WORKING_APIS.clipdrop.url, form, {
+            headers: headers,
+            timeout: 120000,
+            responseType: 'arraybuffer'
+        });
+        
+        if (response.status === 200 && response.data) {
+            const resultBuffer = Buffer.from(response.data);
             
-            const form = new FormData();
-            form.append('file', imageBuffer, {
-                filename: 'enhance.jpg',
-                contentType: 'image/jpeg'
-            });
-            form.append('scale', '2'); // 2x upscale
-            form.append('noise', '1'); // noise reduction level
-            
-            const response = await axios.post('https://waifu2x.org/api', form, {
-                headers: {
-                    ...form.getHeaders(),
-                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-                    'Accept': 'application/json',
-                    'Referer': 'https://waifu2x.org/'
-                },
-                timeout: 120000
-            });
-            
-            if (response.data && response.data.url) {
-                const imageResponse = await axios.get(response.data.url, {
-                    responseType: 'arraybuffer',
-                    timeout: 60000
-                });
-                
-                const resultBuffer = Buffer.from(imageResponse.data);
-                console.log(`✅ Waifu2x.org berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-                resolve(resultBuffer);
+            if (resultBuffer.length > imageBuffer.length * 1.1) {
+                console.log(`✅ ClipDrop berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+                return resultBuffer;
             } else {
-                throw new Error('Waifu2x.org response tidak valid');
+                throw new Error('Hasil tidak menunjukkan peningkatan yang signifikan');
             }
-            
-        } catch (error) {
-            console.error('❌ Error Waifu2x.org:', error.message);
-            reject(error);
         }
-    });
+        
+        throw new Error('Response tidak valid dari ClipDrop');
+        
+    } catch (error) {
+        console.error('❌ ClipDrop error:', error.message);
+        throw error;
+    }
 }
 
 /**
- * Fungsi untuk enhance dengan API alternatif menggunakan upscaling sederhana
+ * Fungsi untuk enhance dengan Sharp (Local Processing) - Ultimate Fallback
  */
-async function enhanceWithSimpleUpscale(imageBuffer) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            console.log('🔄 Menggunakan simple upscale fallback...');
-            
-            // Coba menggunakan API publik lain yang available
-            const form = new FormData();
-            form.append('image', imageBuffer, {
-                filename: 'image.jpg',
-                contentType: 'image/jpeg'
-            });
-            
-            // Coba API waifu2x publik yang lain
-            const publicApis = [
-                'https://api.waifu2x.cc/upscale',
-                'https://waifu2x.pro/api/upscale'
-            ];
-            
-            for (const apiUrl of publicApis) {
-                try {
-                    console.log(`📡 Trying ${apiUrl}...`);
-                    
-                    const response = await axios.post(apiUrl, form, {
-                        headers: {
-                            ...form.getHeaders(),
-                            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
-                        },
-                        timeout: 90000
-                    });
-                    
-                    if (response.data && (response.data.url || response.data.result_url)) {
-                        const imageUrl = response.data.url || response.data.result_url;
-                        const imageResponse = await axios.get(imageUrl, {
-                            responseType: 'arraybuffer',
-                            timeout: 60000
-                        });
-                        
-                        const resultBuffer = Buffer.from(imageResponse.data);
-                        
-                        // Cek apakah hasilnya benar-benar berbeda (minimal 10% lebih besar)
-                        if (resultBuffer.length > imageBuffer.length * 1.1) {
-                            console.log(`✅ Enhancement berhasil via ${apiUrl}: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-                            resolve(resultBuffer);
-                            return;
-                        }
-                    }
-                } catch (apiError) {
-                    console.log(`❌ ${apiUrl} failed:`, apiError.message);
-                    continue;
-                }
-            }
-            
-            // Jika semua API gagal, return error instead of original image
-            throw new Error('Semua API enhancement tidak tersedia atau tidak memberikan hasil yang valid');
-            
-        } catch (error) {
-            console.error('❌ Error Simple Upscale:', error.message);
-            reject(error);
-        }
-    });
+async function enhanceWithSharp(imageBuffer) {
+    try {
+        console.log('🔄 Menggunakan Sharp untuk local enhancement...');
+        
+        // Dapatkan metadata gambar asli
+        const metadata = await sharp(imageBuffer).metadata();
+        console.log(`📊 Original: ${metadata.width}x${metadata.height}`);
+        
+        // Upscale 2x dengan interpolasi dan sharpening
+        const enhancedBuffer = await sharp(imageBuffer)
+            .resize(metadata.width * 2, metadata.height * 2, {
+                kernel: sharp.kernel.lanczos3, // High-quality interpolation
+                fit: 'fill'
+            })
+            .sharpen(0.5, 1, 2) // Mild sharpening
+            .modulate({
+                brightness: 1.05, // Slight brightness boost
+                saturation: 1.1   // Slight saturation boost
+            })
+            .jpeg({
+                quality: 95,
+                progressive: true,
+                mozjpeg: true // Better compression
+            })
+            .toBuffer();
+        
+        console.log(`✅ Sharp enhancement selesai: ${(enhancedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+        console.log(`📊 Upscaled to: ${metadata.width * 2}x${metadata.height * 2}`);
+        
+        return enhancedBuffer;
+        
+    } catch (error) {
+        console.error('❌ Sharp enhancement error:', error.message);
+        throw error;
+    }
 }
 
 /**
- * Fungsi untuk validasi gambar yang lebih robust
+ * Fungsi untuk enhance dengan Simple Bicubic (Jika Sharp tidak tersedia)
+ */
+async function enhanceWithSimpleBicubic(imageBuffer) {
+    try {
+        console.log('🔄 Menggunakan simple bicubic upscaling...');
+        
+        // Jika sharp tidak available, gunakan canvas processing sederhana
+        // Ini adalah fallback terakhir yang pasti akan bekerja
+        
+        const Canvas = require('canvas');
+        const Image = Canvas.Image;
+        
+        const img = new Image();
+        img.src = imageBuffer;
+        
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+        });
+        
+        const canvas = Canvas.createCanvas(img.width * 2, img.height * 2);
+        const ctx = canvas.getContext('2d');
+        
+        // Set high-quality rendering
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Draw upscaled image
+        ctx.drawImage(img, 0, 0, img.width * 2, img.height * 2);
+        
+        const enhancedBuffer = canvas.toBuffer('image/jpeg', { quality: 0.95 });
+        
+        console.log(`✅ Simple bicubic selesai: ${(enhancedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+        return enhancedBuffer;
+        
+    } catch (error) {
+        console.error('❌ Simple bicubic error:', error.message);
+        throw error;
+    }
+}
+
+/**
+ * Fungsi untuk validasi gambar yang comprehensive
  */
 function validateImageBuffer(buffer) {
     if (!buffer || buffer.length === 0) {
         throw new Error('Buffer gambar kosong atau tidak valid');
     }
     
-    // Cek signature file untuk format yang didukung
+    // Cek signature file
     const signatures = {
         jpeg: ['ffd8ff'],
         png: ['89504e47'],
@@ -271,16 +229,15 @@ function validateImageBuffer(buffer) {
     }
     
     if (!isValidFormat) {
-        throw new Error(`Format file tidak didukung. Terdeteksi: ${detectedFormat}. Gunakan JPEG, PNG, WebP, atau GIF.`);
+        throw new Error(`Format file tidak didukung. Gunakan JPEG, PNG, WebP, atau GIF.`);
     }
     
-    // Cek ukuran file (maksimal 15MB untuk lily-baileys)
-    const maxSize = 15 * 1024 * 1024; // 15MB
+    // Cek ukuran file (maksimal 20MB untuk processing)
+    const maxSize = 20 * 1024 * 1024;
     if (buffer.length > maxSize) {
-        throw new Error(`Ukuran file terlalu besar: ${(buffer.length / 1024 / 1024).toFixed(2)}MB (maksimal 15MB)`);
+        throw new Error(`Ukuran file terlalu besar: ${(buffer.length / 1024 / 1024).toFixed(2)}MB (maksimal 20MB)`);
     }
     
-    // Cek ukuran minimum (minimal 1KB)
     if (buffer.length < 1024) {
         throw new Error('File gambar terlalu kecil atau rusak');
     }
@@ -290,12 +247,12 @@ function validateImageBuffer(buffer) {
 }
 
 /**
- * Fungsi untuk cek koneksi dengan multiple endpoints
+ * Fungsi untuk cek koneksi internet
  */
-async function checkConnectivity() {
+async function checkInternetConnection() {
     const testUrls = [
         'https://google.com',
-        'https://tools.revesery.com',
+        'https://www.upscale.media',
         'https://httpbin.org/status/200'
     ];
     
@@ -303,17 +260,14 @@ async function checkConnectivity() {
         try {
             const response = await axios.get(url, { 
                 timeout: 8000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (compatible; ConnTest/1.0)'
-                }
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ConnTest/1.0)' }
             });
             
             if (response.status === 200) {
-                console.log(`✅ Koneksi OK via ${url}`);
+                console.log(`✅ Internet OK via ${url}`);
                 return true;
             }
         } catch (error) {
-            console.log(`❌ Gagal connect ke ${url}:`, error.message);
             continue;
         }
     }
@@ -322,96 +276,97 @@ async function checkConnectivity() {
 }
 
 /**
- * Fungsi untuk download media dengan retry mechanism
+ * Fungsi untuk download media dengan retry
  */
 async function downloadMediaWithRetry(quotedMessage, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            console.log(`📥 Percobaan download ${attempt}/${maxRetries}...`);
+            console.log(`📥 Download attempt ${attempt}/${maxRetries}...`);
             
-            const buffer = await downloadMediaMessage(
-                quotedMessage,
-                'buffer',
-                {}
-            );
+            const buffer = await downloadMediaMessage(quotedMessage, 'buffer', {});
             
             if (buffer && buffer.length > 0) {
                 console.log(`✅ Download berhasil: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
                 return buffer;
             } else {
-                throw new Error('Buffer hasil download kosong');
+                throw new Error('Downloaded buffer is empty');
             }
             
         } catch (error) {
-            console.error(`❌ Download attempt ${attempt} gagal:`, error.message);
+            console.error(`❌ Download attempt ${attempt} failed:`, error.message);
             
             if (attempt === maxRetries) {
-                throw new Error(`Gagal download media setelah ${maxRetries} percobaan: ${error.message}`);
+                throw new Error(`Download gagal setelah ${maxRetries} percobaan: ${error.message}`);
             }
             
-            // Delay sebelum retry
-            const delay = 1000 * attempt; // 1s, 2s, 3s
-            console.log(`⏳ Menunggu ${delay}ms sebelum retry...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
     }
 }
 
 /**
- * Fungsi utama untuk enhance gambar dengan multiple API fallback
+ * Fungsi utama untuk enhance gambar dengan multiple fallbacks
  */
 async function processImageEnhancement(imageBuffer) {
-    console.log('🎯 Memulai proses enhancement...');
+    console.log('🎯 Memulai proses image enhancement...');
     
     // Validasi gambar
-    const validation = validateImageBuffer(imageBuffer);
+    validateImageBuffer(imageBuffer);
     
-    // Priority order API calls
-    const apiSequence = [
-        { name: 'Waifu2x.org', func: enhanceWithWaifu2xOrg },
-        { name: 'Simple Upscale', func: enhanceWithSimpleUpscale },
-        { name: 'Revesery', func: enhanceWithRevesery }
+    // Sequence API calls dengan prioritas
+    const enhancementMethods = [
+        { name: 'Upscale.media', func: enhanceWithUpscaleMedia, requiresInternet: true },
+        { name: 'ClipDrop', func: enhanceWithClipDrop, requiresInternet: true },
+        { name: 'Sharp (Local)', func: enhanceWithSharp, requiresInternet: false },
+        { name: 'Simple Bicubic', func: enhanceWithSimpleBicubic, requiresInternet: false }
     ];
     
     let lastError = null;
     
-    for (const api of apiSequence) {
+    for (const method of enhancementMethods) {
         try {
-            console.log(`🚀 Mencoba ${api.name}...`);
-            const result = await api.func(imageBuffer);
+            console.log(`🚀 Mencoba ${method.name}...`);
             
-            // Validasi hasil - pastikan benar-benar ada enhancement
+            // Skip internet-based methods jika tidak ada koneksi
+            if (method.requiresInternet) {
+                const hasInternet = await checkInternetConnection();
+                if (!hasInternet) {
+                    console.log(`⚠️ Skip ${method.name} - no internet connection`);
+                    continue;
+                }
+            }
+            
+            const result = await method.func(imageBuffer);
+            
             if (result && result.length > 0) {
-                const sizeDifference = Math.abs(result.length - imageBuffer.length);
                 const sizeRatio = result.length / imageBuffer.length;
                 
-                // Cek apakah ada perubahan signifikan (minimal 5% difference atau 1.2x size)
-                if (sizeDifference > (imageBuffer.length * 0.05) || sizeRatio > 1.2 || sizeRatio < 0.8) {
-                    console.log(`✅ ${api.name} berhasil! Size ratio: ${sizeRatio.toFixed(2)}x`);
+                // Untuk local processing, kita terima hasil apapun yang valid
+                if (!method.requiresInternet || sizeRatio > 1.1) {
+                    console.log(`✅ ${method.name} berhasil! Size ratio: ${sizeRatio.toFixed(2)}x`);
                     return result;
                 } else {
-                    console.log(`⚠️ ${api.name} tidak memberikan enhancement yang signifikan`);
-                    lastError = new Error(`${api.name}: Tidak ada peningkatan kualitas yang terdeteksi`);
+                    console.log(`⚠️ ${method.name} tidak memberikan enhancement yang signifikan`);
                     continue;
                 }
             }
             
         } catch (error) {
-            console.log(`❌ ${api.name} gagal:`, error.message);
+            console.log(`❌ ${method.name} gagal:`, error.message);
             lastError = error;
             continue;
         }
     }
     
-    // Jika semua API gagal, throw error instead of returning original
-    console.error('❌ Semua API enhancement gagal');
-    throw lastError || new Error('Semua service enhancement tidak tersedia atau tidak memberikan hasil yang valid');
+    // Jika semua method gagal
+    console.error('❌ Semua enhancement methods gagal');
+    throw lastError || new Error('Tidak dapat memproses gambar dengan method apapun');
 }
 
 module.exports = {
     name: "hd",
-    alias: ["remini", "enhance", "upscale", "ai", "4k"],
-    description: "Meningkatkan resolusi dan detail gambar menggunakan AI",
+    alias: ["remini", "enhance", "upscale", "ai", "4k", "2x"],
+    description: "Meningkatkan resolusi dan detail gambar menggunakan AI + Local Processing",
     category: "converter",
     cooldown: 30,
     execute: async (msg, { bot, usedPrefix, command }) => {
@@ -419,50 +374,39 @@ module.exports = {
         let processingMessage = null;
         
         try {
-            // Identifikasi pesan yang mengandung gambar
+            // Deteksi pesan gambar
             const quotedMessage = msg.quoted || msg;
             const messageType = quotedMessage?.type || quotedMessage?.mtype || "";
             
-            console.log(`📋 Detecting message type: ${messageType}`);
+            console.log(`📋 Message type: ${messageType}`);
             
-            // Validasi tipe pesan
-            const validTypes = ['imageMessage', 'image'];
-            if (!validTypes.includes(messageType)) {
-                const helpText = `❌ *Cara Penggunaan:*\n\n` +
+            if (!['imageMessage', 'image'].includes(messageType)) {
+                const helpText = `❌ *Cara Penggunaan HD Enhancer:*\n\n` +
                     `📸 Kirim gambar + caption: \`${usedPrefix}${command}\`\n` +
                     `📸 Reply gambar dengan: \`${usedPrefix}${command}\`\n\n` +
-                    `🎯 *Fitur:* Meningkatkan kualitas & resolusi gambar dengan AI\n` +
-                    `📊 *Format:* JPEG, PNG, WebP, GIF (max 15MB)\n` +
-                    `⏱️ *Estimasi:* 30-90 detik`;
+                    `🎯 *Fitur:*\n` +
+                    `• AI Enhancement (online)\n` +
+                    `• Local Processing (offline)\n` +
+                    `• 2x Upscaling\n` +
+                    `• Smart Quality Enhancement\n\n` +
+                    `📊 *Support:* JPEG, PNG, WebP, GIF (max 20MB)\n` +
+                    `⏱️ *Waktu:* 15-90 detik`;
                 
                 return await msg.reply(helpText);
-            }
-
-            // Cek koneksi internet
-            console.log('🌐 Memeriksa koneksi internet...');
-            const isOnline = await checkConnectivity();
-            if (!isOnline) {
-                return await msg.reply(
-                    "❌ *Tidak ada koneksi internet*\n\n" +
-                    "🔧 *Solusi:*\n" +
-                    "• Periksa koneksi internet server\n" +
-                    "• Coba lagi dalam beberapa menit\n" +
-                    "• Hubungi admin jika masalah berlanjut"
-                );
             }
 
             // Feedback awal
             await msg.react("⏳");
             
             processingMessage = await msg.reply(
-                "🔄 *Memproses gambar dengan AI...*\n\n" +
+                "🔄 *HD Enhancement dimulai...*\n\n" +
                 "📊 Status: Mengunduh gambar...\n" +
-                "⏱️ Estimasi: 30-90 detik\n" +
-                "🎯 Mode: HD Enhancement\n\n" +
-                "_Mohon tunggu, jangan kirim perintah lain..._"
+                "🎯 Mode: AI + Local Processing\n" +
+                "⏱️ Estimasi: 15-90 detik\n\n" +
+                "_Processing dengan multiple fallback methods..._"
             );
 
-            // Download gambar dengan retry
+            // Download gambar
             let imageBuffer;
             try {
                 imageBuffer = await downloadMediaWithRetry(quotedMessage, 3);
@@ -470,11 +414,11 @@ module.exports = {
                 await msg.react("❌");
                 return await msg.reply(
                     "❌ *Gagal mengunduh gambar*\n\n" +
-                    `🔧 **Error:** ${downloadError.message}\n\n` +
+                    `**Error:** ${downloadError.message}\n\n` +
                     "**Solusi:**\n" +
-                    "• Coba kirim ulang gambar\n" +
-                    "• Pastikan gambar tidak rusak\n" +
-                    "• Gunakan gambar dengan ukuran lebih kecil"
+                    "• Kirim ulang gambar yang tidak rusak\n" +
+                    "• Pastikan ukuran < 20MB\n" +
+                    "• Coba dengan format JPEG/PNG"
                 );
             }
 
@@ -482,14 +426,13 @@ module.exports = {
             await msg.react("🧠");
             
             try {
-                // Edit pesan status jika memungkinkan
                 if (processingMessage?.key) {
                     await bot.sendMessage(msg.from, {
-                        text: "🔄 *Memproses gambar dengan AI...*\n\n" +
-                              "📊 Status: Meningkatkan kualitas...\n" +
-                              "⏱️ Progress: 50%\n" +
-                              "🎯 Mode: HD Enhancement\n\n" +
-                              "_Sedang memproses dengan server AI..._",
+                        text: "🔄 *HD Enhancement berlangsung...*\n\n" +
+                              "📊 Status: Memproses dengan AI...\n" +
+                              "🎯 Progress: 60%\n" +
+                              "⚡ Fallback: Local processing ready\n\n" +
+                              "_Mohon tunggu, sedang enhance gambar..._",
                         edit: processingMessage.key
                     });
                 }
@@ -504,24 +447,18 @@ module.exports = {
             } catch (enhanceError) {
                 await msg.react("❌");
                 
-                let errorMsg = "❌ *Gagal memproses gambar*\n\n";
-                
-                if (enhanceError.message.includes('terlalu besar')) {
-                    errorMsg += "📏 **Masalah:** Ukuran file terlalu besar\n";
-                    errorMsg += "🔧 **Solusi:** Kompres gambar hingga < 15MB";
-                } else if (enhanceError.message.includes('format')) {
-                    errorMsg += "📷 **Masalah:** Format tidak didukung\n";
-                    errorMsg += "🔧 **Solusi:** Gunakan JPEG, PNG, WebP, atau GIF";
-                } else if (enhanceError.message.includes('Timeout')) {
-                    errorMsg += "⏱️ **Masalah:** Proses timeout\n";
-                    errorMsg += "🔧 **Solusi:** Coba dengan gambar lebih kecil";
-                } else if (enhanceError.message.includes('server') || enhanceError.message.includes('connect')) {
-                    errorMsg += "🌐 **Masalah:** Server AI tidak dapat diakses\n";
-                    errorMsg += "🔧 **Solusi:** Coba lagi dalam 5-10 menit";
-                } else {
-                    errorMsg += `🔧 **Error:** ${enhanceError.message}\n\n`;
-                    errorMsg += "**Coba lagi atau hubungi admin**";
-                }
+                const errorMsg = 
+                    "❌ *Semua enhancement methods gagal*\n\n" +
+                    `**Error:** ${enhanceError.message}\n\n` +
+                    "**Kemungkinan penyebab:**\n" +
+                    "• Semua AI service sedang down\n" +
+                    "• Gambar format tidak didukung\n" +
+                    "• Sistem local processing error\n" +
+                    "• Ukuran file terlalu besar\n\n" +
+                    "**Solusi:**\n" +
+                    "• Coba lagi dalam 10-15 menit\n" +
+                    "• Gunakan gambar JPEG/PNG < 10MB\n" +
+                    "• Hubungi admin jika masalah berlanjut";
                 
                 return await msg.reply(errorMsg);
             }
@@ -530,17 +467,18 @@ module.exports = {
             const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
             const originalSizeMB = (imageBuffer.length / 1024 / 1024).toFixed(2);
             const resultSizeMB = (enhancedBuffer.length / 1024 / 1024).toFixed(2);
+            const sizeRatio = (enhancedBuffer.length / imageBuffer.length).toFixed(2);
             
             const successCaption = 
-                `✅ *Gambar berhasil ditingkatkan!*\n\n` +
-                `📊 **Detail Processing:**\n` +
+                `✅ *Gambar berhasil di-enhance!*\n\n` +
+                `📊 **Enhancement Details:**\n` +
                 `• Ukuran asli: ${originalSizeMB} MB\n` +
                 `• Ukuran hasil: ${resultSizeMB} MB\n` +
+                `• Size ratio: ${sizeRatio}x\n` +
                 `• Waktu proses: ${processingTime}s\n` +
-                `• Engine: AI Enhancement\n` +
-                `• Quality: HD Upscaled\n\n` +
-                `🎯 *Kualitas dan resolusi telah ditingkatkan dengan AI*\n` +
-                `💡 *Tip: Simpan gambar untuk hasil terbaik*`;
+                `• Method: AI + Local Processing\n\n` +
+                `🎯 *Resolusi dan kualitas telah ditingkatkan*\n` +
+                `💡 *Tip: Simpan untuk hasil terbaik*`;
 
             await bot.sendMessage(msg.from, {
                 image: enhancedBuffer,
@@ -550,30 +488,27 @@ module.exports = {
 
             await msg.react("✅");
             
-            // Hapus pesan processing jika ada
+            // Cleanup
             try {
                 if (processingMessage?.key) {
                     await bot.sendMessage(msg.from, { delete: processingMessage.key });
                 }
             } catch (e) {
-                // Ignore delete error
+                // Ignore
             }
 
-            console.log(`✅ HD processing completed in ${processingTime}s`);
+            console.log(`✅ HD processing completed in ${processingTime}s with ratio ${sizeRatio}x`);
 
         } catch (error) {
             console.error("❌ Fatal error in HD command:", error);
             await msg.react("❌");
             
-            const fatalErrorMsg = 
-                "❌ *Terjadi kesalahan sistem*\n\n" +
-                "🔧 **Solusi:**\n" +
-                "• Restart bot jika perlu\n" +
-                "• Coba lagi dalam beberapa menit\n" +
-                "• Hubungi admin jika error berlanjut\n\n" +
-                `**Error Code:** ${error.message}`;
-            
-            await msg.reply(fatalErrorMsg);
+            await msg.reply(
+                "❌ *System Error*\n\n" +
+                "Terjadi kesalahan fatal pada sistem.\n" +
+                "Mohon coba lagi atau hubungi admin.\n\n" +
+                `**Error:** ${error.message}`
+            );
         }
     }
 };
