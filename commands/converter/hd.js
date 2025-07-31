@@ -124,8 +124,7 @@ module.exports = {
                 `📊 **Detail Proses:**\n` +
                 `• Ukuran Asli: ${originalSizeMB} MB\n` +
                 `• Ukuran Hasil: ${resultSizeMB} MB\n` +
-                `• Waktu Proses: ${processingTime} detik\n` +
-                `• Metode: Lokal (Sharp Engine)\n\n` +
+                `• Waktu Proses: ${processingTime} detik\n\n` +
                 `🎯 *Resolusi dan kualitas telah ditingkatkan.*`;
 
             // Kirim gambar hasil dengan kualitas terbaik
