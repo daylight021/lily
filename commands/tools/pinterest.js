@@ -81,8 +81,8 @@ async function getPinterestImages(keyword) {
     await page.setViewport({ width: 1024, height: 768 });
     
     // Tambahkan randomness pada keyword untuk hasil berbeda
-    const randomizedKeyword = addRandomness(keyword);
-    const query = encodeURIComponent(randomizedKeyword);
+    // const randomizedKeyword = addRandomness(keyword);
+    const query = encodeURIComponent(keyword);
     const url = `https://id.pinterest.com/search/pins/?q=${query}`;
 
     await page.setUserAgent(
