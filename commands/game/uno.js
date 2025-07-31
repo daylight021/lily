@@ -22,7 +22,7 @@ async function sendPlayerCards(bot, player, game) {
             // Mengganti spasi dengan underscore untuk ID tombol yang aman
             const cardValueForFile = card.value.replace(/ /g, '_');
             const cardName = `${card.color}_${cardValueForFile}`.toLowerCase();
-            const imagePath = path.join(__dirname, `../../media/uno/${cardName}.png`);
+            const imagePath = path.join(__dirname, `../../lib/cards/${cardName}.png`);
 
             if (fs.existsSync(imagePath)) {
                 let buttons;
