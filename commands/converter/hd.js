@@ -7,110 +7,199 @@ const sharp = require('sharp'); // Untuk local processing fallback
  * API endpoints yang masih bekerja berdasarkan research 2025
  */
 const WORKING_APIS = {
-    upscale_media: {
-        url: 'https://www.upscale.media/api/upscale',
-        name: 'Upscale.media'
-    },
     clipdrop: {
         url: 'https://clipdrop-api.co/image-upscaling/v1/upscale',
         name: 'ClipDrop',
-        key: '5612c6468e60f8680f55a0f471007812fa5c2418489c5c2fe54dc2b62c95b7af39d12a3bdc92011286fc7b013324ab7e' // Opsional - bisa kosong untuk free tier
+        key: '5612c6468e60f8680f55a0f471007812fa5c2418489c5c2fe54dc2b62c95b7af39d12a3bdc92011286fc7b013324ab7e' // Ganti dengan API key Anda
     },
-    pixelcut: {
-        url: 'https://api.pixelcut.ai/v1/upscale',
-        name: 'Pixelcut'
+    deepai: {
+        url: 'https://api.deepai.org/api/waifu2x',
+        name: 'DeepAI',
+        key: 'e72b5aa0-acc3-48b5-b4c5-54be052d29dd' // Free tier available
+    },
+    replicate: {
+        url: 'https://api.replicate.com/v1/predictions',
+        name: 'Replicate',
+        model: 'jingyunliang/swinir'
+    },
+    upscalepics: {
+        url: 'https://api.upscalepics.com/upscale',
+        name: 'UpscalePics'
+    },
+    picwish: {
+        url: 'https://www.picwish.com/api/upscale',
+        name: 'Picwish'
     }
 };
 
 /**
- * Fungsi untuk enhance dengan Upscale.media
+ * Fungsi untuk enhance dengan DeepAI (Free Tier Available)
  */
-async function enhanceWithUpscaleMedia(imageBuffer) {
+async function enhanceWithDeepAI(imageBuffer) {
     try {
-        console.log('🔄 Mencoba Upscale.media API...');
+        console.log('🔄 Mencoba DeepAI Waifu2x...');
         
         const form = new FormData();
         form.append('image', imageBuffer, {
             filename: 'enhance.jpg',
             contentType: 'image/jpeg'
         });
-        form.append('scale', '2'); // 2x upscale
-        form.append('format', 'jpeg');
         
-        const response = await axios.post(WORKING_APIS.upscale_media.url, form, {
+        const response = await axios.post(WORKING_APIS.deepai.url, form, {
             headers: {
                 ...form.getHeaders(),
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json, image/*',
-                'Referer': 'https://www.upscale.media/'
+                'api-key': 'quickstart-QUdJIGlzIGNvbWluZy4uLi4K', // Free demo key
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
             },
-            timeout: 120000,
-            responseType: 'arraybuffer' // Langsung dapat buffer
+            timeout: 120000
         });
         
-        if (response.status === 200 && response.data) {
-            const resultBuffer = Buffer.from(response.data);
+        if (response.data && response.data.output_url) {
+            console.log('🔗 Downloading DeepAI result...');
             
-            if (resultBuffer.length > imageBuffer.length * 1.2) {
-                console.log(`✅ Upscale.media berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+            const imageResponse = await axios.get(response.data.output_url, {
+                responseType: 'arraybuffer',
+                timeout: 60000
+            });
+            
+            const resultBuffer = Buffer.from(imageResponse.data);
+            
+            if (resultBuffer.length > imageBuffer.length * 1.1) {
+                console.log(`✅ DeepAI berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
                 return resultBuffer;
             } else {
-                throw new Error('Hasil tidak menunjukkan peningkatan yang signifikan');
+                throw new Error('DeepAI: Hasil tidak menunjukkan peningkatan signifikan');
             }
         }
         
-        throw new Error('Response tidak valid dari Upscale.media');
+        throw new Error('DeepAI: Response tidak valid');
         
     } catch (error) {
-        console.error('❌ Upscale.media error:', error.message);
+        console.error('❌ DeepAI error:', error.message);
         throw error;
     }
 }
 
 /**
- * Fungsi untuk enhance dengan ClipDrop API
+ * Fungsi untuk enhance dengan UpscalePics (Free API)
  */
-async function enhanceWithClipDrop(imageBuffer) {
+async function enhanceWithUpscalePics(imageBuffer) {
+    try {
+        console.log('🔄 Mencoba UpscalePics API...');
+        
+        const form = new FormData();
+        form.append('image', imageBuffer, {
+            filename: 'enhance.jpg',
+            contentType: 'image/jpeg'
+        });
+        form.append('scale', '2');
+        
+        const response = await axios.post(WORKING_APIS.upscalepics.url, form, {
+            headers: {
+                ...form.getHeaders(),
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+                'Accept': 'application/json'
+            },
+            timeout: 120000
+        });
+        
+        if (response.data && response.data.result_url) {
+            console.log('🔗 Downloading UpscalePics result...');
+            
+            const imageResponse = await axios.get(response.data.result_url, {
+                responseType: 'arraybuffer',
+                timeout: 60000
+            });
+            
+            const resultBuffer = Buffer.from(imageResponse.data);
+            
+            if (resultBuffer.length > imageBuffer.length * 1.1) {
+                console.log(`✅ UpscalePics berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+                return resultBuffer;
+            }
+        }
+        
+        throw new Error('UpscalePics: Response tidak valid atau tidak ada peningkatan');
+        
+    } catch (error) {
+        console.error('❌ UpscalePics error:', error.message);
+        throw error;
+    }
+}
+
+/**
+ * Fungsi untuk enhance dengan ClipDrop API (Fixed Implementation)
+ */
+async function enhanceWithClipDrop(imageBuffer, apiKey) {
     try {
         console.log('🔄 Mencoba ClipDrop API...');
+        
+        if (!apiKey || apiKey === 'YOUR_CLIPDROP_API_KEY') {
+            throw new Error('ClipDrop API key tidak tersedia');
+        }
+        
+        // Dapatkan metadata gambar untuk menentukan target size
+        const sharp = require('sharp');
+        const metadata = await sharp(imageBuffer).metadata();
+        
+        // Target size 2x dari original
+        const targetWidth = Math.min(metadata.width * 2, 4096); // Max 4096px
+        const targetHeight = Math.min(metadata.height * 2, 4096); // Max 4096px
+        
+        console.log(`📊 Original: ${metadata.width}x${metadata.height}, Target: ${targetWidth}x${targetHeight}`);
         
         const form = new FormData();
         form.append('image_file', imageBuffer, {
             filename: 'enhance.jpg',
             contentType: 'image/jpeg'
         });
+        form.append('target_width', targetWidth.toString());
+        form.append('target_height', targetHeight.toString());
         
-        const headers = {
-            ...form.getHeaders(),
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
-        };
-        
-        // Jika ada API key, tambahkan
-        if (WORKING_APIS.clipdrop.key && WORKING_APIS.clipdrop.key !== 'YOUR_CLIPDROP_API_KEY') {
-            headers['x-api-key'] = WORKING_APIS.clipdrop.key;
-        }
+        console.log('📤 Sending request to ClipDrop...');
         
         const response = await axios.post(WORKING_APIS.clipdrop.url, form, {
-            headers: headers,
+            headers: {
+                ...form.getHeaders(),
+                'x-api-key': apiKey,
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+            },
             timeout: 120000,
-            responseType: 'arraybuffer'
+            responseType: 'arraybuffer',
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
         });
+        
+        console.log(`📥 ClipDrop response: ${response.status}`);
+        console.log(`📊 Credits remaining: ${response.headers['x-remaining-credits'] || 'Unknown'}`);
         
         if (response.status === 200 && response.data) {
             const resultBuffer = Buffer.from(response.data);
             
-            if (resultBuffer.length > imageBuffer.length * 1.1) {
-                console.log(`✅ ClipDrop berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-                return resultBuffer;
-            } else {
-                throw new Error('Hasil tidak menunjukkan peningkatan yang signifikan');
-            }
+            console.log(`✅ ClipDrop berhasil: ${(resultBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+            return resultBuffer;
         }
         
-        throw new Error('Response tidak valid dari ClipDrop');
+        throw new Error(`ClipDrop returned status ${response.status}`);
         
     } catch (error) {
         console.error('❌ ClipDrop error:', error.message);
+        
+        if (error.response) {
+            console.error('❌ Response status:', error.response.status);
+            console.error('❌ Response data:', error.response.data?.toString() || 'No response data');
+            
+            if (error.response.status === 400) {
+                throw new Error('ClipDrop: Request format invalid (400)');
+            } else if (error.response.status === 401) {
+                throw new Error('ClipDrop: API key invalid (401)');
+            } else if (error.response.status === 402) {
+                throw new Error('ClipDrop: No credits remaining (402)');
+            } else if (error.response.status === 429) {
+                throw new Error('ClipDrop: Rate limit exceeded (429)');
+            }
+        }
+        
         throw error;
     }
 }
@@ -307,25 +396,34 @@ async function downloadMediaWithRetry(quotedMessage, maxRetries = 3) {
 /**
  * Fungsi utama untuk enhance gambar dengan multiple fallbacks
  */
-async function processImageEnhancement(imageBuffer) {
+async function processImageEnhancement(imageBuffer, clipdropApiKey = null) {
     console.log('🎯 Memulai proses image enhancement...');
     
     // Validasi gambar
     validateImageBuffer(imageBuffer);
     
-    // Sequence API calls dengan prioritas
+    // Sequence API calls dengan prioritas (hanya API yang benar-benar gratis/available)
     const enhancementMethods = [
-        { name: 'Upscale.media', func: enhanceWithUpscaleMedia, requiresInternet: true },
-        { name: 'ClipDrop', func: enhanceWithClipDrop, requiresInternet: true },
-        { name: 'Sharp (Local)', func: enhanceWithSharp, requiresInternet: false },
-        { name: 'Simple Bicubic', func: enhanceWithSimpleBicubic, requiresInternet: false }
+        // ClipDrop jika ada API key
+        ...(clipdropApiKey && clipdropApiKey !== 'YOUR_CLIPDROP_API_KEY' ? 
+            [{ name: 'ClipDrop', func: () => enhanceWithClipDrop(imageBuffer, clipdropApiKey), requiresInternet: true }] : []
+        ),
+        // DeepAI dengan free demo key
+        { name: 'DeepAI', func: () => enhanceWithDeepAI(imageBuffer), requiresInternet: true },
+        // UpscalePics free API
+        { name: 'UpscalePics', func: () => enhanceWithUpscalePics(imageBuffer), requiresInternet: true },
+        // Local processing fallbacks
+        { name: 'Sharp (Local)', func: () => enhanceWithSharp(imageBuffer), requiresInternet: false },
+        { name: 'Simple Bicubic', func: () => enhanceWithSimpleBicubic(imageBuffer), requiresInternet: false }
     ];
     
     let lastError = null;
+    let usedMethod = 'Unknown';
     
     for (const method of enhancementMethods) {
         try {
             console.log(`🚀 Mencoba ${method.name}...`);
+            usedMethod = method.name;
             
             // Skip internet-based methods jika tidak ada koneksi
             if (method.requiresInternet) {
@@ -336,15 +434,19 @@ async function processImageEnhancement(imageBuffer) {
                 }
             }
             
-            const result = await method.func(imageBuffer);
+            const result = await method.func();
             
             if (result && result.length > 0) {
                 const sizeRatio = result.length / imageBuffer.length;
                 
                 // Untuk local processing, kita terima hasil apapun yang valid
-                if (!method.requiresInternet || sizeRatio > 1.1) {
+                // Untuk online APIs, harus ada peningkatan minimal
+                const isLocalMethod = !method.requiresInternet;
+                const hasImprovement = isLocalMethod || sizeRatio > 1.1;
+                
+                if (hasImprovement) {
                     console.log(`✅ ${method.name} berhasil! Size ratio: ${sizeRatio.toFixed(2)}x`);
-                    return result;
+                    return { buffer: result, method: method.name, ratio: sizeRatio };
                 } else {
                     console.log(`⚠️ ${method.name} tidak memberikan enhancement yang signifikan`);
                     continue;
@@ -360,7 +462,8 @@ async function processImageEnhancement(imageBuffer) {
     
     // Jika semua method gagal
     console.error('❌ Semua enhancement methods gagal');
-    throw lastError || new Error('Tidak dapat memproses gambar dengan method apapun');
+    const errorDetails = lastError ? lastError.message : 'Unknown error';
+    throw new Error(`Tidak dapat memproses gambar dengan method apapun. Last error: ${errorDetails}`);
 }
 
 module.exports = {
@@ -441,9 +544,12 @@ module.exports = {
             }
 
             // Proses enhancement
-            let enhancedBuffer;
+            let enhancementResult;
             try {
-                enhancedBuffer = await processImageEnhancement(imageBuffer);
+                // Ambil ClipDrop API key dari environment atau hardcode
+                const clipdropApiKey = process.env.CLIPDROP_API_KEY || 'YOUR_CLIPDROP_API_KEY';
+                
+                enhancementResult = await processImageEnhancement(imageBuffer, clipdropApiKey);
             } catch (enhanceError) {
                 await msg.react("❌");
                 
@@ -452,11 +558,13 @@ module.exports = {
                     `**Error:** ${enhanceError.message}\n\n` +
                     "**Kemungkinan penyebab:**\n" +
                     "• Semua AI service sedang down\n" +
+                    "• ClipDrop API key tidak valid/expired\n" +
                     "• Gambar format tidak didukung\n" +
                     "• Sistem local processing error\n" +
                     "• Ukuran file terlalu besar\n\n" +
                     "**Solusi:**\n" +
                     "• Coba lagi dalam 10-15 menit\n" +
+                    "• Periksa ClipDrop API key\n" +
                     "• Gunakan gambar JPEG/PNG < 10MB\n" +
                     "• Hubungi admin jika masalah berlanjut";
                 
@@ -466,8 +574,8 @@ module.exports = {
             // Kirim hasil
             const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
             const originalSizeMB = (imageBuffer.length / 1024 / 1024).toFixed(2);
-            const resultSizeMB = (enhancedBuffer.length / 1024 / 1024).toFixed(2);
-            const sizeRatio = (enhancedBuffer.length / imageBuffer.length).toFixed(2);
+            const resultSizeMB = (enhancementResult.buffer.length / 1024 / 1024).toFixed(2);
+            const sizeRatio = enhancementResult.ratio.toFixed(2);
             
             const successCaption = 
                 `✅ *Gambar berhasil di-enhance!*\n\n` +
@@ -476,12 +584,15 @@ module.exports = {
                 `• Ukuran hasil: ${resultSizeMB} MB\n` +
                 `• Size ratio: ${sizeRatio}x\n` +
                 `• Waktu proses: ${processingTime}s\n` +
-                `• Method: AI + Local Processing\n\n` +
+                `• Method: ${enhancementResult.method}\n` +
+                `• Engine: ${enhancementResult.method.includes('ClipDrop') ? 'AI (Paid)' : 
+                           enhancementResult.method.includes('DeepAI') ? 'AI (Free)' : 
+                           enhancementResult.method.includes('UpscalePics') ? 'AI (Free)' : 'Local Processing'}\n\n` +
                 `🎯 *Resolusi dan kualitas telah ditingkatkan*\n` +
-                `💡 *Tip: Simpan untuk hasil terbaik*`;
+                `💡 *Method used: ${enhancementResult.method}*`;
 
             await bot.sendMessage(msg.from, {
-                image: enhancedBuffer,
+                image: enhancementResult.buffer,
                 caption: successCaption,
                 mimetype: 'image/jpeg'
             }, { quoted: msg });
