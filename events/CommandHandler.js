@@ -40,6 +40,37 @@ module.exports = {
       const botPrefix = new RegExp("^[" + "/!#$%+£¢€¥^°=¶∆×÷π√✓©®:;?&.\\-".replace(/[|\\{}()[\]^$+*?.\-\^]/g, "\\$&") + "]");
       const isCommand = msg.text && botPrefix.test(msg.text);
 
+      // ========== HANDLER UNTUK BUTTON RESPONSE UNO ==========
+      if (msg.text && (msg.text.startsWith("Mainkan Kartu ") || msg.text.startsWith("Mainkan Wild ") || msg.text.startsWith("Mainkan +4 Wild "))) {
+        console.log(`[BUTTON_HANDLER] UNO card button detected: "${msg.text}" from ${msg.sender}`);
+        
+        try {
+          // Ambil command uno
+          const unoCommand = this.commands.get('uno');
+          if (unoCommand) {
+            console.log(`[COMMAND] Executing uno with button response`);
+            
+            // Execute uno command dengan button response
+            const extra = { 
+              bot: this, 
+              usedPrefix: '.', // Default prefix untuk uno
+              participants: [], 
+              groupMetadata: null, 
+              args: [], // Tidak perlu args karena akan dihandle oleh logic uno.js
+              command: 'uno' 
+            };
+            
+            return await unoCommand.execute.call(this, msg, extra);
+          } else {
+            console.log(`[ERROR] uno command not found in commands collection`);
+            return msg.reply("❌ Command uno tidak ditemukan.");
+          }
+        } catch (error) {
+          console.error('Error handling UNO card button response:', error);
+          return msg.reply("❌ Terjadi kesalahan saat memproses kartu UNO.");
+        }
+      }
+
       // ========== HANDLER UNTUK BUTTON RESPONSE YOUTUBE VIDEO ==========
       if (msg.text && msg.text.startsWith("Download ") && msg.text.match(/Download (2160p|1440p|1080p60|1080p|720p60|720p|480p|360p|240p|144p)/)) {
         console.log(`[BUTTON_HANDLER] YouTube video button detected: "${msg.text}" from ${msg.sender}`);
