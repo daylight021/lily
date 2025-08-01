@@ -37,37 +37,33 @@ async function sendPlayerCards(bot, player, game) {
             const fileName = cardToFileName(card);
             const imageUrl = GITHUB_CARD_URL + fileName;
 
-            if (fs.existsSync(imagePath)) {
-                let buttons;
-                const cardIdentifier = `${card.color.replace(/ /g, '_')}_${card.value.replace(/ /g, '_')}`;
+            let buttons;
+            const cardIdentifier = `${card.color.replace(/ /g, '_')}_${card.value.replace(/ /g, '_')}`;
 
-                if (card.isWild) {
-                    const wildDisplayText = card.value === 'Wild' ? 'Wild' : '+4 Wild';
-                    buttons = ['Red', 'Green', 'Blue', 'Yellow'].map(color => ({
-                        buttonId: `.uno wild ${cardIdentifier}|${color}`,
-                        buttonText: { displayText: `Mainkan ${wildDisplayText} ${color}` },
-                        type: 1
-                    }));
-                } else {
-                    buttons = [{
-                        buttonId: `.uno card ${cardIdentifier}`,
-                        buttonText: { displayText: `Mainkan Kartu ${card.color} ${card.value}` },
-                        type: 1
-                    }];
-                }
-
-                // Mengirim sebagai gambar dengan tombol
-                await bot.sendMessage(player.id, {
-                    image: { url: imageUrl },
-                    caption: `Kartu: *${card.color} ${card.value}*`,
-                    footer: "UNO Game by 『∂αуℓιgнт』",
-                    buttons: buttons,
-                    headerType: 4
-                });
-                await sleep(400); // Jeda diperlambat sedikit untuk stabilitas
+            if (card.isWild) {
+                const wildDisplayText = card.value === 'Wild' ? 'Wild' : '+4 Wild';
+                buttons = ['Red', 'Green', 'Blue', 'Yellow'].map(color => ({
+                    buttonId: `.uno wild ${cardIdentifier}|${color}`,
+                    buttonText: { displayText: `Mainkan ${wildDisplayText} ${color}` },
+                    type: 1
+                }));
             } else {
-                console.log(`[UNO] File kartu tidak ditemukan: ${imagePath}`);
+                buttons = [{
+                    buttonId: `.uno card ${cardIdentifier}`,
+                    buttonText: { displayText: `Mainkan Kartu ${card.color} ${card.value}` },
+                    type: 1
+                }];
             }
+
+            // Mengirim sebagai gambar dengan tombol
+            await bot.sendMessage(player.id, {
+                image: { url: imageUrl },
+                caption: `Kartu: *${card.color} ${card.value}*`,
+                footer: "UNO Game by 『∂αуℓιgнт』",
+                buttons: buttons,
+                headerType: 4
+            });
+            await sleep(400); // Jeda diperlambat sedikit untuk stabilitas
         }
     } catch (e) {
         console.error(`[UNO] Gagal mengirim kartu ke ${player.id}:`, e);
