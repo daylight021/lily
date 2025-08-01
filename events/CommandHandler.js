@@ -41,7 +41,7 @@ module.exports = {
       const isCommand = msg.text && botPrefix.test(msg.text);
 
       // ========== HANDLER UNTUK BUTTON RESPONSE YOUTUBE VIDEO ==========
-      if (msg.text && msg.text.startsWith("Download ") && msg.text.match(/Download (1080p|720p|480p|360p|240p|144p)/)) {
+      if (msg.text && msg.text.startsWith("Download ") && msg.text.match(/Download (2160p|1440p|1080p60|1080p|720p60|720p|480p|360p|240p|144p)/)) {
         console.log(`[BUTTON_HANDLER] YouTube video button detected: "${msg.text}" from ${msg.sender}`);
         
         // Cek apakah user memiliki session YouTube yang aktif
@@ -128,7 +128,7 @@ module.exports = {
 
       // ========== ADDITIONAL BUTTON HANDLERS ==========
       // Handler untuk button response lainnya bisa ditambahkan di sini
-      if (msg.text && msg.text.startsWith("Download ") && !msg.text.match(/Download (1080p|720p|480p|360p|240p|144p|Audio \d+kbps)/)) {
+      if (msg.text && msg.text.startsWith("Download ") && !msg.text.match(/Download (2160p|1440p|1080p60|1080p|720p60|720p|480p|360p|240p|144p|Audio \d+kbps)/)) {
         console.log(`[BUTTON_HANDLER] Other button response detected: "${msg.text}" from ${msg.sender}`);
         // Tambahkan handler untuk button lainnya jika diperlukan
       }
