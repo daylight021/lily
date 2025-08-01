@@ -36,7 +36,7 @@ async function sendPlayerCards(bot, player, game) {
         // FIX 4: Pastikan semua kartu terkirim
         for (const card of player.hand) {
             const fileName = cardToFileName(card);
-            const imagePath = path.join(__dirname, `../../media/uno/${fileName}`);
+            const imagePath = path.join(__dirname, `../../lib/cards/${fileName}`);
 
             if (fs.existsSync(imagePath)) {
                 let buttons;
@@ -62,7 +62,7 @@ async function sendPlayerCards(bot, player, game) {
                 await bot.sendMessage(player.id, {
                     image: fs.readFileSync(imagePath),
                     caption: `Kartu: *${card.color} ${card.value}*`,
-                    footer: "UNO Game by Shikimori",
+                    footer: "UNO Game by 『∂αуℓιgнт』",
                     buttons: buttons,
                     headerType: 4
                 });
@@ -259,7 +259,7 @@ module.exports = {
                     const currentPlayer = game.getCurrentPlayer();
                     const topCard = game.getTopCard();
                     const fileName = cardToFileName(topCard);
-                    const imagePath = path.join(__dirname, `../../media/uno/${fileName}`);
+                    const imagePath = path.join(__dirname, `../../lib/cards/${fileName}`);
 
                     if (fs.existsSync(imagePath)) {
                         await bot.sendMessage(from, {
