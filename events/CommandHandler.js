@@ -44,6 +44,12 @@ module.exports = {
       if (msg.text && (msg.text.startsWith("Mainkan Kartu ") || msg.text.startsWith("Mainkan Wild ") || msg.text.startsWith("Mainkan +4 Wild "))) {
         console.log(`[BUTTON_HANDLER] UNO card button detected: "${msg.text}" from ${msg.sender}`);
         
+        // Pastikan ini adalah pesan dari PM (bukan grup)
+        if (msg.isGroup) {
+          console.log(`[BUTTON_HANDLER] Ignoring UNO button from group`);
+          return;
+        }
+        
         try {
           // Ambil command uno
           const unoCommand = this.commands.get('uno');
