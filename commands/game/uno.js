@@ -27,8 +27,8 @@ async function sendPlayerCards(bot, player, game) {
     try {
         const topCard = game.getTopCard();
         const initialMessage = player.id === game.getCurrentPlayer().id
-            ? `🃏 Giliranmu! Kartu teratas di meja adalah *${topCard.color} ${topCard.value}*. Ini dek kartumu:`
-            : `⏳ Menunggu giliran. Kartu teratas adalah *${topCard.color} ${topCard.value}*. Ini dek kartumu:`;
+            ? `====================\n\n🃏 Giliranmu! Kartu teratas di meja adalah *${topCard.color} ${topCard.value}*. Ini dek kartumu:\n\n====================`
+            : `====================\n\n⏳ Menunggu giliran. Kartu teratas adalah *${topCard.color} ${topCard.value}*. Ini dek kartumu:\n\n====================`;
 
         await bot.sendMessage(player.id, { text: initialMessage });
 
@@ -41,7 +41,6 @@ async function sendPlayerCards(bot, player, game) {
                 let buttons;
                 const cardIdentifier = `${card.color.replace(/ /g, '_')}_${card.value.replace(/ /g, '_')}`;
 
-                // Sesuaikan displayText agar cocok dengan CommandHandler.js
                 if (card.isWild) {
                     const wildDisplayText = card.value === 'Wild' ? 'Wild' : '+4 Wild';
                     buttons = ['Red', 'Green', 'Blue', 'Yellow'].map(color => ({
@@ -173,7 +172,6 @@ class Game {
         const activePlayers = this.players.filter(p => p.isActive);
         if (activePlayers.length === 0) return null;
         
-        // Pastikan currentPlayerIndex tidak keluar dari batas pemain aktif
         if (this.currentPlayerIndex >= activePlayers.length) {
             this.currentPlayerIndex = 0;
         }
@@ -210,7 +208,6 @@ class Game {
     }
     resetDeck() { this.deck = this.discardPile.slice(0, -1); this.discardPile = [this.discardPile.pop()]; this.shuffleDeck(); }
     
-    // Perbaiki logika reverse dan skip untuk 2 pemain
     handleSpecialCard(playedCard, bot, fromGroup) {
         const activePlayers = this.players.filter(p => p.isActive);
         
@@ -266,14 +263,12 @@ class Game {
         return { skipTurn: false, message: null };
     }
     
-    // Calculate game statistics
     getGameStats() {
         const totalCards = this.players.reduce((sum, p) => sum + p.hand.length, 0);
         const avgCards = Math.round(totalCards / this.players.filter(p => p.isActive).length);
         return { totalCards, avgCards };
     }
     
-    // Get current leaderboard (fewest cards first)
     getCurrentLeaderboard() {
         return this.players
             .filter(p => p.isActive)
@@ -305,10 +300,8 @@ module.exports = {
             const currentPlayer = game.getCurrentPlayer();
             if (!currentPlayer || currentPlayer.id !== sender) return msg.reply('Sabar, ini bukan giliranmu!');
             
-            // Parsing dari displayText
             let color, value, chosenColor;
             
-            // Handle Wild cards
             if (body.startsWith('Mainkan Wild ') || body.startsWith('Mainkan +4 Wild ')) {
                 if (body.startsWith('Mainkan Wild ')) {
                     value = 'Wild';
@@ -319,7 +312,6 @@ module.exports = {
                 }
                 color = 'Wild';
             } else {
-                // Regular cards
                 let parts = body.replace('Mainkan Kartu ', '').split(' ');
                 color = parts[0];
                 value = parts.slice(1).join(' ');
@@ -335,21 +327,17 @@ module.exports = {
             const playedCard = currentPlayer.hand[cardIndex];
             const topCard = game.getTopCard();
             
-            // Validasi kartu
             if (!playedCard.isWild && playedCard.color !== topCard.color && playedCard.value !== topCard.value) {
                 return msg.reply('Kartu tidak cocok dengan kartu teratas!');
             }
 
-            // Set warna untuk wild cards
             if (playedCard.isWild) {
                 playedCard.color = chosenColor;
             }
 
-            // Hapus kartu dari tangan pemain
             currentPlayer.hand.splice(cardIndex, 1);
             game.discardPile.push(playedCard);
             
-            // Announce tanpa mention pemain yang memainkan kartu
             let announcement;
             if (playedCard.value === 'Wild' || playedCard.value === 'Wild Draw Four') {
                 announcement = `🃏 ${currentPlayer.name} memainkan *${value}* dan memilih warna *${chosenColor}*.`;
@@ -357,7 +345,6 @@ module.exports = {
                 announcement = `🃏 ${currentPlayer.name} memainkan kartu *${playedCard.color} ${playedCard.value}*.`;
             }
             
-            // Cek UNO
             if (currentPlayer.hand.length === 1) {
                 game.unoCalled[sender] = true;
                 announcement += `\n\n🔥 *UNO!* ${currentPlayer.name} sisa 1 kartu!`;
@@ -365,7 +352,6 @@ module.exports = {
                 game.unoCalled[sender] = false;
             }
 
-            // Cek kemenangan
             if (currentPlayer.hand.length === 0) {
                 const winnerRank = game.winners.length + 1;
                 currentPlayer.isActive = false;
@@ -378,20 +364,18 @@ module.exports = {
                 const remainingActivePlayers = game.players.filter(p => p.isActive);
                 
                 if (remainingActivePlayers.length <= 1) {
-                    // Game selesai
                     if (remainingActivePlayers.length === 1) {
                         const lastPlayer = remainingActivePlayers[0];
                         lastPlayer.isActive = false;
                         game.winners.push({ rank: winnerRank + 1, name: lastPlayer.name, id: lastPlayer.id });
                     }
 
-                    // Create detailed final results
                     let finalScoreboard = game.winners
                         .map(w => `🏆 Juara ${w.rank}: ${w.name}`)
                         .join('\n');
 
                     const gameStats = game.getGameStats();
-                    const totalMoves = game.discardPile.length - 1; // -1 for initial card
+                    const totalMoves = game.discardPile.length - 1;
                     
                     const groupMessage = `🏁 *PERMAINAN SELESAI!*\n\n${finalScoreboard}\n\n📊 *Statistik Game:*\n• Total gerakan: ${totalMoves}\n• Pemain: ${game.players.length}\n\nTerima kasih sudah bermain! 🎉`;
 
@@ -401,7 +385,6 @@ module.exports = {
                         mentions: game.winners.map(w => w.id)
                     });
 
-                    // Send detailed results to all players
                     const winnersList = game.winners.map(w => `🏆 Juara ${w.rank}: ${w.name}`).join('\n');
                     
                     for(const player of game.players) {
@@ -430,7 +413,6 @@ module.exports = {
                     return;
                 }
 
-                // Game berlanjut
                 await sleep(1000);
                 game.nextTurn();
                 const nextPlayer = game.getCurrentPlayer();
@@ -442,7 +424,6 @@ module.exports = {
                 return;
             }
 
-            // Handle special cards
             const specialResult = game.handleSpecialCard(playedCard, bot, fromGroup);
             
             await bot.sendMessage(fromGroup, { text: announcement });
@@ -455,17 +436,15 @@ module.exports = {
                     mentions: mentions 
                 });
                 
-                // Send updated cards to affected player
                 if (specialResult.affectedPlayer) {
                     await sendPlayerCards(bot, specialResult.affectedPlayer, game);
                 }
             }
             
-            // Move to next turn
             if (specialResult.skipTurn) {
-                game.nextTurn(); // Skip the next player
+                game.nextTurn();
             }
-            game.nextTurn(); // Move to the actual next player
+            game.nextTurn();
             
             const nextPlayer = game.getCurrentPlayer();
             if (nextPlayer) {
@@ -491,7 +470,6 @@ module.exports = {
                 if (game.players.find(p => p.id === sender)) return msg.reply('Kamu sudah bergabung.');
 
                 if (game.addPlayer({ id: sender, name: senderName })) {
-                    const playerMentions = game.players.map(p => p.id);
                     const playerList = game.players.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
                     msg.reply(`✅ ${senderName} berhasil bergabung!\n\n*Pemain di Lobi (${game.players.length}/10):*\n${playerList}`);
                 } else {
@@ -502,6 +480,7 @@ module.exports = {
 
             case 'start': {
                 if (!game) return msg.reply('Tidak ada sesi UNO. Buat dulu dengan `.uno create`.');
+                if (game.isGameRunning) return msg.reply('Game sudah berjalan. Tidak bisa memulai lagi.');
                 if (game.creatorId !== sender) return msg.reply('Hanya pembuat sesi yang bisa memulai game.');
                 if (game.players.length < 2) return msg.reply('Minimal butuh 2 pemain untuk memulai!');
 
@@ -588,10 +567,11 @@ module.exports = {
                 }
                 break;
             }
+            
+            case 'end': {
                 if (!game) return msg.reply('Tidak ada sesi UNO.');
                 if (game.creatorId !== sender) return msg.reply('Hanya pembuat sesi yang bisa mengakhiri game.');
                 
-                // Notify all players
                 for (const player of game.players) {
                     if (player.id !== sender) {
                         try {
@@ -605,9 +585,20 @@ module.exports = {
                 delete bot.uno[from];
                 msg.reply('🛑 Sesi UNO telah dihentikan.');
                 break;
+            }
                 
             default:
-                msg.reply('🃏 *Perintah Game UNO* 🃏\n\n`.uno create` - Membuat lobi permainan\n`.uno join` - Bergabung ke lobi\n`.uno start` - Memulai permainan\n`.uno cards` - Meminta kartu dikirim ulang ke PM\n`.uno draw` - Mengambil satu kartu dari dek\n`.uno end` - Menghentikan permainan (hanya host)');
+                msg.reply(
+                    '🃏 *Perintah Game UNO* 🃏\n\n' +
+                    '`.uno create` - Membuat lobi permainan\n' +
+                    '`.uno join` - Bergabung ke lobi\n' +
+                    '`.uno start` - Memulai permainan\n' +
+                    '`.uno cards` - Meminta kartu dikirim ulang ke PM\n' +
+                    '`.uno draw` - Mengambil satu kartu dari dek\n' +
+                    '`.uno status` - Melihat status permainan\n' +
+                    '`.uno stats` - Melihat statistik dan leaderboard\n' +
+                    '`.uno end` - Menghentikan permainan (hanya host)'
+                );
                 break;
         }
     }
