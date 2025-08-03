@@ -1,15 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 
-// Path ke file soal dan database
+// Path ke file soal, pastikan lokasinya benar (sejajar dengan database.json)
 const soalPath = path.join(__dirname, '..', '..', 'lib', 'tebakkata-soal.json');
 const allSoal = JSON.parse(fs.readFileSync(soalPath));
 
 // Fungsi untuk membuat soal hangman
 function generateHangman(word) {
     let letters = word.split('');
-    // Acak jumlah huruf yang dihilangkan (antara 30% - 50% dari panjang kata)
-    let lettersToRemove = Math.floor(letters.length * (Math.random() * 0.2 + 0.3));
+    let lettersToRemove = Math.floor(letters.length * (Math.random() * 0.2 + 0.4));
+    if (lettersToRemove === 0) lettersToRemove = 2; // Pastikan minimal 2 huruf hilang
+
     for (let i = 0; i < lettersToRemove; i++) {
         let randomIndex;
         do {
@@ -25,7 +26,6 @@ async function sendQuestion(bot, groupId) {
     const gameSession = bot.game.tebakkata[groupId];
     if (!gameSession) return;
 
-    // Pilih level secara acak, lalu pilih soal dari level itu
     const levels = ['mudah', 'menengah', 'sulit'];
     const randomLevel = levels[Math.floor(Math.random() * levels.length)];
     const soalPool = allSoal[randomLevel];
@@ -38,15 +38,13 @@ async function sendQuestion(bot, groupId) {
         text: `🧩 *Tebak Kata* 🧩\n\nClue: *${currentSoal.clue}*\nSoal: \`\`\`${questionText}\`\`\`\n\nPoin: *${points}*\nTimeout: 60 detik\n\nReply pesan ini untuk menjawab!`
     });
 
-    // Perbarui sesi dengan data soal baru
     gameSession.answer = currentSoal.soal;
     gameSession.points = points;
     gameSession.questionMsgId = message.key.id;
 
-    // Set timer baru
     gameSession.timeout = setTimeout(() => {
         endGame(bot, groupId);
-    }, 60000); // 60 detik
+    }, 60000);
 }
 
 // Fungsi untuk mengakhiri game
@@ -64,20 +62,18 @@ async function endGame(bot, groupId) {
             sessionLeaderboardText += `${medal} @${userId.split('@')[0]} - *${score}* Poin\n`;
         });
 
-        // Update leaderboard global di database
-        const db = bot.db; // Menggunakan instance db dari client
+        const db = bot.db;
         if (!db.data.tebakKataLeaderboard) {
             db.data.tebakKataLeaderboard = {};
         }
         for (const [userId, score] of sortedSession) {
             db.data.tebakKataLeaderboard[userId] = (db.data.tebakKataLeaderboard[userId] || 0) + score;
         }
-        await db.write(); // Simpan perubahan ke database.json
+        await db.write();
     } else {
         sessionLeaderboardText += '_Tidak ada yang berhasil menjawab di sesi ini._\n';
     }
 
-    // Tampilkan leaderboard global
     const globalLeaderboard = bot.db.data.tebakKataLeaderboard || {};
     const sortedGlobal = Object.entries(globalLeaderboard).sort(([, a], [, b]) => b - a).slice(0, 10);
     let globalLeaderboardText = '\n-- LEADERBOARD GLOBAL --\n';
@@ -91,12 +87,11 @@ async function endGame(bot, groupId) {
     }
 
     const mentions = sortedSession.map(([userId]) => userId).concat(sortedGlobal.map(([userId]) => userId));
-    await client.sendMessage(groupId, { 
+    await bot.sendMessage(groupId, { 
         text: `Waktu Habis! 🕔 Jawaban yang benar adalah: *${gameSession.answer}*\n\nSesi permainan telah berakhir!\n\n${sessionLeaderboardText}${globalLeaderboardText}`,
-        mentions: [...new Set(mentions)] // Hilangkan duplikat mentions
+        mentions: [...new Set(mentions)]
     });
-
-    // Hapus sesi game
+    
     delete bot.game.tebakkata[groupId];
 }
 
@@ -106,8 +101,10 @@ module.exports = {
     category: 'game',
     aliases: ['tkata'],
     description: 'Mini-game tebak kata seru!',
-    async execute(bot, msg, args) {
-        const { from, sender } = msg;
+    // Perbaiki parameter fungsi execute
+    async execute(msg, extra) {
+        const { from } = msg;
+        const { bot, args } = extra; // Ambil bot dan args dari extra
         const subCommand = args[0]?.toLowerCase();
 
         if (subCommand === 'start') {
@@ -115,9 +112,8 @@ module.exports = {
                 return bot.sendMessage(from, { text: 'Sesi "Tebak Kata" sudah berjalan di grup ini. Selesaikan dulu sesi yang ada!' });
             }
             
-            // Inisialisasi sesi baru
             bot.game.tebakkata[from] = {
-                sessionScores: {}, // { 'userId': score }
+                sessionScores: {},
                 answer: null,
                 points: 0,
                 questionMsgId: null,
@@ -144,10 +140,9 @@ module.exports = {
             await bot.sendMessage(from, { text, mentions });
 
         } else {
-            // Pesan Bantuan (jika tidak ada argumen atau argumen salah)
             const helpText = `*Bantuan Game Tebak Kata* 🎲\n\nBerikut adalah perintah yang tersedia:\n\n1. \`.tebakkata start\`\n   Untuk memulai sesi permainan baru.\n\n2. \`.tebakkata leaderboard\`\n   Untuk melihat peringkat poin global.\n\n*Cara Bermain:*\n- Bot akan mengirimkan soal.\n- Reply/balas pesan soal tersebut dengan jawabanmu.\n- Sesi berakhir jika tidak ada yang menjawab dalam 60 detik.`;
             await bot.sendMessage(from, { text: helpText });
         }
     },
-    sendQuestion // Ekspor fungsi agar bisa dipanggil dari CommandHandler
+    sendQuestion
 };
