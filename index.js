@@ -57,7 +57,7 @@ async function startBot() {
   chokidar.watch(path.join(__dirname, "commands"), { persistent: true, ignoreInitial: true })
     .on("all", () => loadCommands("commands", bot));
 
-  // --- PERUBAHAN 3: Event Handler yang Disesuaikan ---
+  // --- Event Handler yang Disesuaikan ---
   bot.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
@@ -113,6 +113,10 @@ async function startBot() {
       console.error("❌ Error pada group participants update:", error);
     }
   });
+
+  bot.game = {
+    tebakkata: {}
+  };
 }
 
 // Fungsi untuk memuat file perintah
