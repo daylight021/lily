@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 
-// Path ke file soal, pastikan lokasinya benar (sejajar dengan database.json)
 const soalPath = path.join(__dirname, '..', '..', 'lib', 'tebakkata-soal.json');
 const allSoal = JSON.parse(fs.readFileSync(soalPath));
 
@@ -19,6 +18,13 @@ function generateHangman(word) {
         letters[randomIndex] = '_';
     }
     return letters.join(' ');
+}
+
+// Fungsi untuk tag semua member grup (seperti hidetag)
+function getAllMembers(participants) {
+    return participants
+        .filter((participant) => participant.admin !== "superadmin" && participant.admin !== "admin")
+        .map((participant) => participant.id);
 }
 
 // Fungsi untuk mengirim soal
@@ -61,39 +67,30 @@ async function sendQuestion(bot, groupId) {
         clearTimeout(gameSession.timeout);
     }
 
+    // Set timeout untuk mengakhiri game jika tidak ada yang jawab
     gameSession.timeout = setTimeout(() => {
-        timeoutQuestion(bot, groupId);
+        endGame(bot, groupId, 'timeout');
     }, 60000);
 }
 
-// Fungsi untuk handle timeout per soal (bukan end game)
-async function timeoutQuestion(bot, groupId) {
-    const gameSession = bot.game.tebakkata[groupId];
-    if (!gameSession) return;
-
-    await bot.sendMessage(groupId, { 
-        text: `⏰ *Waktu Habis!*\n\n` +
-              `Jawaban yang benar adalah: *${gameSession.answer}*\n` +
-              `Level: ${gameSession.level}\n\n` +
-              `🔄 Bersiap untuk soal berikutnya...`
-    });
-
-    // Lanjut ke soal berikutnya setelah 3 detik
-    setTimeout(() => {
-        if (bot.game.tebakkata[groupId]) {
-            sendQuestion(bot, groupId);
-        }
-    }, 3000);
-}
-
 // Fungsi untuk mengakhiri game
-async function endGame(bot, groupId) {
+async function endGame(bot, groupId, reason = 'manual') {
     const gameSession = bot.game.tebakkata[groupId];
     if (!gameSession) return;
 
     // Clear timeout jika ada
     if (gameSession.timeout) {
         clearTimeout(gameSession.timeout);
+    }
+
+    let endGameText = '';
+    if (reason === 'timeout') {
+        endGameText = `⏰ *WAKTU HABIS!*\n\n` +
+                     `Jawaban yang benar adalah: *${gameSession.answer}*\n` +
+                     `Level: ${gameSession.level}\n\n` +
+                     `🏁 *GAME BERAKHIR KARENA TIDAK ADA YANG MENJAWAB*\n\n`;
+    } else {
+        endGameText = `🛑 *GAME DIHENTIKAN SECARA MANUAL*\n\n`;
     }
 
     let sessionLeaderboardText = '-- LEADERBOARD SESI INI --\n';
@@ -106,6 +103,7 @@ async function endGame(bot, groupId) {
             sessionLeaderboardText += `${medal} @${userId.split('@')[0]} - *${score}* Poin\n`;
         });
 
+        // Simpan ke database global
         const db = bot.db;
         if (!db.data.tebakKataLeaderboard) {
             db.data.tebakKataLeaderboard = {};
@@ -132,10 +130,11 @@ async function endGame(bot, groupId) {
 
     const mentions = sortedSession.map(([userId]) => userId).concat(sortedGlobal.map(([userId]) => userId));
     await bot.sendMessage(groupId, { 
-        text: `🎮 *GAME TEBAK KATA BERAKHIR!*\n\n` +
+        text: `🎮 ${endGameText}` +
               `📊 Total soal dimainkan: ${gameSession.questionCount || 0}\n\n` +
               `${sessionLeaderboardText}${globalLeaderboardText}\n\n` +
-              `Terima kasih telah bermain! 🎉`,
+              `Terima kasih telah bermain! 🎉\n` +
+              `Mulai lagi dengan *.tebakkata start*`,
         mentions: [...new Set(mentions)]
     });
     
@@ -147,10 +146,10 @@ module.exports = {
     category: 'game',
     aliases: ['tkata'],
     description: 'Mini-game tebak kata seru!',
-    group: true, // Tambahkan ini agar hanya bisa dimainkan di grup
+    group: true, // Hanya bisa dimainkan di grup
     async execute(msg, extra) {
         const { from } = msg;
-        const { bot, args } = extra;
+        const { bot, args, participants } = extra;
         const subCommand = args[0]?.toLowerCase();
 
         // Inisialisasi game object jika belum ada
@@ -165,10 +164,12 @@ module.exports = {
             if (bot.game.tebakkata?.[from]) {
                 return bot.sendMessage(from, { 
                     text: '⚠️ Sesi "Tebak Kata" sudah berjalan di grup ini!\n\n' +
-                          'Gunakan `.tebakkata stop` untuk menghentikan sesi yang sedang berjalan.' 
+                          'Sesi akan berakhir otomatis jika tidak ada yang bisa menjawab soal dalam 60 detik.\n\n' +
+                          'Gunakan `.tebakkata status` untuk melihat status game saat ini.' 
                 });
             }
             
+            // Inisialisasi sesi game baru
             bot.game.tebakkata[from] = {
                 sessionScores: {},
                 answer: null,
@@ -179,28 +180,44 @@ module.exports = {
                 level: null
             };
 
+            // Tag semua member grup dengan pesan ajakan
+            const allMembers = getAllMembers(participants);
+            const challengeMessages = [
+                `🎮 *GAME TEBAK KATA DIMULAI!* 🧩\n\n` +
+                `🔥 Ayo buktikan siapa yang paling jago tebak kata!\n` +
+                `💪 Tantangan untuk semua member grup!\n` +
+                `🏆 Raih poin tertinggi dan jadilah juara!\n\n` +
+                `🚀 *Soal pertama akan segera muncul...*\n` +
+                `📝 Jangan lupa reply pesan soal untuk menjawab!`,
+                
+                `🧩 *ARENA TEBAK KATA TERBUKA!* 🎯\n\n` +
+                `⚡ Siapa yang siap mengasah otak?\n` +
+                `🎊 Game seru untuk semua member!\n` +
+                `💎 Kumpulkan poin sebanyak-banyaknya!\n\n` +
+                `🎲 *Mari kita mulai petualangan kata...*\n` +
+                `🔍 Baca clue dengan teliti ya!`,
+                
+                `🎪 *FESTIVAL TEBAK KATA DIMULAI!* 🎭\n\n` +
+                `🌟 Calling all smart members!\n` +
+                `🎯 Uji kemampuan kosakata kalian!\n` +
+                `🏅 Siapa yang akan menjadi master kata?\n\n` +
+                `🎨 *Get ready for the word challenge!*\n` +
+                `💡 Setiap soal punya clue yang membantu!`
+            ];
+            
+            const randomMessage = challengeMessages[Math.floor(Math.random() * challengeMessages.length)];
+            
             await bot.sendMessage(from, { 
-                text: '🎉 *SESI TEBAK KATA DIMULAI!*\n\n' +
-                      '🎯 Bersiaplah untuk tantangan kata-kata seru!\n' +
-                      '💡 Baca clue dengan teliti\n' +
-                      '📝 Reply pesan soal untuk menjawab\n' +
-                      '⏰ Setiap soal ada batas waktu 60 detik\n\n' +
-                      '🚀 *Soal pertama akan segera muncul...*'
+                text: randomMessage,
+                mentions: allMembers
             });
             
-            // Delay 2 detik sebelum soal pertama
+            // Delay 3 detik sebelum soal pertama untuk memberi waktu member melihat
             setTimeout(() => {
                 if (bot.game.tebakkata[from]) {
                     sendQuestion(bot, from);
                 }
-            }, 2000);
-
-        } else if (subCommand === 'stop') {
-            if (!bot.game.tebakkata?.[from]) {
-                return bot.sendMessage(from, { text: '❌ Tidak ada sesi "Tebak Kata" yang berjalan di grup ini.' });
-            }
-            
-            await endGame(bot, from);
+            }, 3000);
 
         } else if (subCommand === 'leaderboard' || subCommand === 'lb') {
             const globalLeaderboard = bot.db.data.tebakKataLeaderboard || {};
@@ -232,7 +249,8 @@ module.exports = {
             const sessionScores = Object.entries(gameSession.sessionScores).sort(([, a], [, b]) => b - a);
             let statusText = `🎮 *STATUS GAME TEBAK KATA*\n\n`;
             statusText += `📊 Soal ke: ${gameSession.questionCount || 0}\n`;
-            statusText += `🎯 Level saat ini: ${gameSession.level || 'Belum dimulai'}\n\n`;
+            statusText += `🎯 Level saat ini: ${gameSession.level || 'Belum dimulai'}\n`;
+            statusText += `💰 Poin soal ini: ${gameSession.points || 0}\n\n`;
             
             if (sessionScores.length > 0) {
                 statusText += `🏆 *Skor Sementara:*\n`;
@@ -243,6 +261,8 @@ module.exports = {
             } else {
                 statusText += `🏆 *Skor Sementara:*\n_Belum ada yang menjawab benar_`;
             }
+            
+            statusText += `\n⏰ Game akan berakhir otomatis jika tidak ada yang menjawab dalam 60 detik.`;
 
             const mentions = sessionScores.map(([userId]) => userId);
             await bot.sendMessage(from, { text: statusText, mentions });
@@ -251,13 +271,13 @@ module.exports = {
             const helpText = `🎯 *BANTUAN GAME TEBAK KATA* 🧩\n\n` +
                            `📋 *Perintah yang tersedia:*\n\n` +
                            `1️⃣ \`.tebakkata start\`\n   🚀 Memulai sesi permainan baru\n\n` +
-                           `2️⃣ \`.tebakkata stop\`\n   🛑 Menghentikan sesi yang sedang berjalan\n\n` +
-                           `3️⃣ \`.tebakkata leaderboard\`\n   🏆 Melihat peringkat poin global\n\n` +
-                           `4️⃣ \`.tebakkata status\`\n   📊 Melihat status game saat ini\n\n` +
+                           `2️⃣ \`.tebakkata leaderboard\`\n   🏆 Melihat peringkat poin global\n\n` +
+                           `3️⃣ \`.tebakkata status\`\n   📊 Melihat status game saat ini\n\n` +
                            `🎮 *Cara Bermain:*\n` +
                            `• Bot akan mengirimkan soal hangman\n` +
                            `• Reply/balas pesan soal dengan jawabanmu\n` +
-                           `• Setiap soal punya batas waktu 60 detik\n` +
+                           `• Game berlanjut selama ada yang bisa jawab\n` +
+                           `• Game berakhir jika tidak ada yang jawab dalam 60 detik\n` +
                            `• Poin berbeda untuk setiap level:\n` +
                            `  - Mudah: 1000 poin\n` +
                            `  - Menengah: 3000 poin\n` +
@@ -267,6 +287,5 @@ module.exports = {
         }
     },
     sendQuestion,
-    endGame,
-    timeoutQuestion
+    endGame
 };
