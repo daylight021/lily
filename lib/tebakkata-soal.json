@@ -1,46 +1,716 @@
 {
   "mudah": [
-    { "soal": "KUCING", "clue": "Hewan peliharaan yang suka mengejar tikus" },
-    { "soal": "BUKU", "clue": "Jendela dunia" },
-    { "soal": "MEJA", "clue": "Perabotan dengan empat kaki untuk menaruh barang" },
-    { "soal": "MATAHARI", "clue": "Bintang yang menerangi bumi di siang hari" },
-    { "soal": "AIR", "clue": "Cairan yang kita minum setiap hari" },
-    { "soal": "RUMAH", "clue": "Tempat tinggal manusia" },
-    { "soal": "MOBIL", "clue": "Kendaraan beroda empat" },
-    { "soal": "BUNGA", "clue": "Bagian tumbuhan yang berwarna-warni dan harum" },
-    { "soal": "NASI", "clue": "Makanan pokok orang Indonesia dari beras" },
-    { "soal": "SEPATU", "clue": "Alas kaki yang melindungi telapak kaki" },
-    { "soal": "HANDPHONE", "clue": "Alat komunikasi yang bisa dibawa kemana-mana" },
-    { "soal": "KOMPUTER", "clue": "Alat untuk bekerja dan bermain" },
-    { "soal": "KELUARGA", "clue": "Kelompok orang yang berkaitan karena hubungan keluarga" }
+    {
+      "soal": "KUCING",
+      "clue": "Hewan peliharaan yang suka mengeong"
+    },
+    {
+      "soal": "MATAHARI",
+      "clue": "Bintang yang menerangi bumi di siang hari"
+    },
+    {
+      "soal": "BUKU",
+      "clue": "Kumpulan kertas yang berisi tulisan untuk dibaca"
+    },
+    {
+      "soal": "AIR",
+      "clue": "Cairan yang kita minum setiap hari"
+    },
+    {
+      "soal": "RUMAH",
+      "clue": "Tempat tinggal manusia"
+    },
+    {
+      "soal": "MOBIL",
+      "clue": "Kendaraan beroda empat"
+    },
+    {
+      "soal": "BUNGA",
+      "clue": "Bagian tumbuhan yang berwarna-warni dan harum"
+    },
+    {
+      "soal": "NASI",
+      "clue": "Makanan pokok orang Indonesia dari beras"
+    },
+    {
+      "soal": "SEPATU",
+      "clue": "Alas kaki yang melindungi telapak kaki"
+    },
+    {
+      "soal": "HANDPHONE",
+      "clue": "Alat komunikasi yang bisa dibawa kemana-mana"
+    },
+    {
+      "soal": "PINTU",
+      "clue": "Jalan masuk dan keluar ruangan"
+    },
+    {
+      "soal": "GELAS",
+      "clue": "Wadah untuk minum yang terbuat dari kaca"
+    },
+    {
+      "soal": "KASUR",
+      "clue": "Tempat tidur yang empuk"
+    },
+    {
+      "soal": "PENSIL",
+      "clue": "Alat tulis yang bisa dihapus"
+    },
+    {
+      "soal": "SUSU",
+      "clue": "Minuman putih yang dihasilkan sapi"
+    },
+    {
+      "soal": "MATA",
+      "clue": "Indra penglihatan"
+    },
+    {
+      "soal": "ROTI",
+      "clue": "Makanan yang dibuat dari tepung terigu"
+    },
+    {
+      "soal": "LAMPU",
+      "clue": "Alat penerangan saat gelap"
+    },
+    {
+      "soal": "IKAN",
+      "clue": "Hewan yang hidup di air dan bernafas dengan insang"
+    },
+    {
+      "soal": "HUJAN",
+      "clue": "Air yang jatuh dari langit"
+    },
+    {
+      "soal": "GIGI",
+      "clue": "Alat untuk mengunyah makanan"
+    },
+    {
+      "soal": "JEMBATAN",
+      "clue": "Penghubung dua tempat yang terpisah sungai"
+    },
+    {
+      "soal": "KEJU",
+      "clue": "Makanan olahan dari susu yang berwarna kuning"
+    },
+    {
+      "soal": "TOPI",
+      "clue": "Penutup kepala"
+    },
+    {
+      "soal": "KUNCI",
+      "clue": "Alat untuk membuka gembok"
+    }
   ],
   "menengah": [
-    { "soal": "SEMARANG", "clue": "Ibu kota provinsi Jawa Tengah" },
-    { "soal": "PELANGI", "clue": "Fenomena optik setelah hujan" },
-    { "soal": "GITAR", "clue": "Alat musik petik dengan enam senar" },
-    { "soal": "PERPUSTAKAAN", "clue": "Tempat menyimpan dan meminjam buku" },
-    { "soal": "KEMERDEKAAN", "clue": "Kebebasan dari penjajahan yang diperoleh Indonesia pada 17 Agustus" },
-    { "soal": "TEKNOLOGI", "clue": "Penerapan ilmu pengetahuan untuk memecahkan masalah" },
-    { "soal": "PENDIDIKAN", "clue": "Proses pembelajaran untuk mengembangkan kemampuan" },
-    { "soal": "KEBUDAYAAN", "clue": "Hasil karya, rasa, dan cipta masyarakat" },
-    { "soal": "DEMOKRASI", "clue": "Sistem pemerintahan dari rakyat, oleh rakyat, untuk rakyat" },
-    { "soal": "PANCASILA", "clue": "Dasar negara Indonesia yang terdiri dari lima sila" },
-    { "soal": "KEANEKARAGAMAN", "clue": "Keberagaman atau variasi yang ada" },
-    { "soal": "TOLERANSI", "clue": "Sikap menghargai perbedaan" },
-    { "soal": "KREATIVITAS", "clue": "Kemampuan untuk menciptakan sesuatu yang baru" }
+    {
+      "soal": "PERPUSTAKAAN",
+      "clue": "Tempat menyimpan dan meminjam buku"
+    },
+    {
+      "soal": "KEMERDEKAAN",
+      "clue": "Kebebasan dari penjajahan yang diperoleh Indonesia pada 17 Agustus"
+    },
+    {
+      "soal": "TEKNOLOGI",
+      "clue": "Penerapan ilmu pengetahuan untuk memecahkan masalah"
+    },
+    {
+      "soal": "PENDIDIKAN",
+      "clue": "Proses pembelajaran untuk mengembangkan kemampuan"
+    },
+    {
+      "soal": "KEBUDAYAAN",
+      "clue": "Hasil karya, rasa, dan cipta masyarakat"
+    },
+    {
+      "soal": "DEMOKRASI",
+      "clue": "Sistem pemerintahan dari rakyat, oleh rakyat, untuk rakyat"
+    },
+    {
+      "soal": "PANCASILA",
+      "clue": "Dasar negara Indonesia yang terdiri dari lima sila"
+    },
+    {
+      "soal": "KEANEKARAGAMAN",
+      "clue": "Keberagaman atau variasi yang ada"
+    },
+    {
+      "soal": "TOLERANSI",
+      "clue": "Sikap menghargai perbedaan"
+    },
+    {
+      "soal": "KREATIVITAS",
+      "clue": "Kemampuan untuk menciptakan sesuatu yang baru"
+    },
+    {
+      "soal": "BUMERANG",
+      "clue": "Senjata yang kembali ke pelempar jika tidak mengenai target"
+    },
+    {
+      "soal": "PELANGI",
+      "clue": "Busur warna-warni yang muncul setelah hujan"
+    },
+    {
+      "soal": "KANGGURU",
+      "clue": "Hewan berkantong dari Australia yang melompat"
+    },
+    {
+      "soal": "OKSIGEN",
+      "clue": "Gas yang kita hirup untuk bernafas"
+    },
+    {
+      "soal": "KOMPUTER",
+      "clue": "Mesin elektronik pengolah data"
+    },
+    {
+      "soal": "MIKROSKOP",
+      "clue": "Alat untuk melihat benda sangat kecil"
+    },
+    {
+      "soal": "KALENDER",
+      "clue": "Sistem perhitungan hari, bulan, dan tahun"
+    },
+    {
+      "soal": "DINOSAURUS",
+      "clue": "Reptil raksasa yang sudah punah jutaan tahun lalu"
+    },
+    {
+      "soal": "GRAVITASI",
+      "clue": "Gaya tarik bumi yang membuat benda jatuh ke bawah"
+    },
+    {
+      "soal": "ANTIBIOTIK",
+      "clue": "Obat untuk melawan bakteri"
+    },
+    {
+      "soal": "MAGNET",
+      "clue": "Benda yang dapat menarik logam"
+    },
+    {
+      "soal": "TERMOMETER",
+      "clue": "Alat ukur suhu badan"
+    },
+    {
+      "soal": "BADAI",
+      "clue": "Angin kencang yang merusak"
+    },
+    {
+      "soal": "LABORATORIUM",
+      "clue": "Tempat melakukan percobaan ilmiah"
+    },
+    {
+      "soal": "NAVIGATOR",
+      "clue": "Orang yang menentukan arah perjalanan"
+    }
   ],
   "sulit": [
-    { "soal": "ASTRONAUT", "clue": "Profesi penjelajah luar angkasa" },
-    { "soal": "FOTOSINTESIS", "clue": "Proses tumbuhan membuat makanan" },
-    { "soal": "KAMUFLASE", "clue": "Kemampuan hewan menyamar di lingkungannya" },
-    { "soal": "EPISTEMOLOGI", "clue": "Cabang filsafat yang mempelajari tentang pengetahuan" },
-    { "soal": "METAMORFOSIS", "clue": "Proses perubahan bentuk pada makhluk hidup" },
-    { "soal": "BIBLIOGRAFI", "clue": "Daftar buku atau sumber pustaka" },
-    { "soal": "PSIKOLOGI", "clue": "Ilmu yang mempelajari tentang jiwa dan perilaku" },
-    { "soal": "ANTROPOLOGI", "clue": "Ilmu yang mempelajari tentang manusia dan kebudayaannya" },
-    { "soal": "MIKROORGANISME", "clue": "Makhluk hidup yang sangat kecil dan hanya bisa dilihat dengan mikroskop" },
-    { "soal": "EKOSISTEM", "clue": "Sistem yang terbentuk dari hubungan timbal balik antara makhluk hidup dan lingkungannya" },
-    { "soal": "GLOBALISASI", "clue": "Proses integrasi internasional yang terjadi karena pertukaran pandangan dunia" },
-    { "soal": "KONSERVASI", "clue": "Upaya pelestarian dan perlindungan alam" }
+    {
+      "soal": "EPISTEMOLOGI",
+      "clue": "Cabang filsafat yang mempelajari tentang pengetahuan"
+    },
+    {
+      "soal": "METAMORFOSIS",
+      "clue": "Proses perubahan bentuk pada makhluk hidup"
+    },
+    {
+      "soal": "FOTOSINTESIS",
+      "clue": "Proses pembuatan makanan pada tumbuhan dengan bantuan cahaya"
+    },
+    {
+      "soal": "BIBLIOGRAFI",
+      "clue": "Daftar buku atau sumber pustaka"
+    },
+    {
+      "soal": "PSIKOLOGI",
+      "clue": "Ilmu yang mempelajari tentang jiwa dan perilaku"
+    },
+    {
+      "soal": "ANTROPOLOGI",
+      "clue": "Ilmu yang mempelajari tentang manusia dan kebudayaannya"
+    },
+    {
+      "soal": "MIKROORGANISME",
+      "clue": "Makhluk hidup yang sangat kecil dan hanya bisa dilihat dengan mikroskop"
+    },
+    {
+      "soal": "EKOSISTEM",
+      "clue": "Sistem yang terbentuk dari hubungan timbal balik antara makhluk hidup dan lingkungannya"
+    },
+    {
+      "soal": "GLOBALISASI",
+      "clue": "Proses integrasi internasional yang terjadi karena pertukaran pandangan dunia"
+    },
+    {
+      "soal": "KONSERVASI",
+      "clue": "Upaya pelestarian dan perlindungan alam"
+    },
+    {
+      "soal": "PARADOKS",
+      "clue": "Pernyataan yang tampaknya bertentangan tapi sebenarnya benar"
+    },
+    {
+      "soal": "HIPNOTIS",
+      "clue": "Teknik untuk membuat seseorang dalam keadaan trance"
+    },
+    {
+      "soal": "ARKEOLOGI",
+      "clue": "Ilmu yang mempelajari kehidupan masa lalu melalui peninggalan budaya"
+    },
+    {
+      "soal": "ALGORITMA",
+      "clue": "Urutan langkah-langkah logis untuk menyelesaikan masalah"
+    },
+    {
+      "soal": "BIOTEKNOLOGI",
+      "clue": "Teknologi yang memanfaatkan makhluk hidup untuk kepentingan manusia"
+    },
+    {
+      "soal": "KIMIA",
+      "clue": "Ilmu yang mempelajari susunan, sifat, dan reaksi zat"
+    },
+    {
+      "soal": "ASTRONOMI",
+      "clue": "Ilmu yang mempelajari benda-benda langit"
+    },
+    {
+      "soal": "MAGNETISME",
+      "clue": "Sifat tarik-menarik atau tolak-menolak benda logam"
+    },
+    {
+      "soal": "SEISMOLOGI",
+      "clue": "Ilmu yang mempelajari gempa bumi"
+    },
+    {
+      "soal": "PALEONTOLOGI",
+      "clue": "Ilmu yang mempelajari fosil makhluk hidup purba"
+    },
+    {
+      "soal": "NEUROLOGI",
+      "clue": "Cabang ilmu kedokteran yang mempelajari sistem saraf"
+    },
+    {
+      "soal": "KRIPTOGRAFI",
+      "clue": "Ilmu tentang teknik penyandian pesan rahasia"
+    },
+    {
+      "soal": "GENEALOGI",
+      "clue": "Studi tentang silsilah keluarga dan keturunan"
+    },
+    {
+      "soal": "ENDOKRINOLOGI",
+      "clue": "Ilmu yang mempelajari sistem hormon"
+    },
+    {
+      "soal": "DERMATOLOGI",
+      "clue": "Cabang ilmu kedokteran yang mempelajari penyakit kulit"
+    }
+  ],
+  "lucu": [
+    {
+      "soal": "KENTUT",
+      "clue": "Gas yang keluar dari belakang dan berbau tidak sedap"
+    },
+    {
+      "soal": "SENDAWA",
+      "clue": "Gas yang keluar dari mulut setelah minum soda"
+    },
+    {
+      "soal": "NGUPIL",
+      "clue": "Kegiatan mengorek hidung dengan jari (jangan ditiru!)"
+    },
+    {
+      "soal": "BERSIN",
+      "clue": "Refleks mengeluarkan udara dari hidung dengan keras"
+    },
+    {
+      "soal": "CEGUKAN",
+      "clue": "Suara 'hik' yang terus berulang dan sulit dihentikan"
+    },
+    {
+      "soal": "KETAWA",
+      "clue": "Ekspresi kegembiraan yang mengeluarkan suara 'haha'"
+    },
+    {
+      "soal": "NGANTUK",
+      "clue": "Kondisi mata berat dan ingin tidur"
+    },
+    {
+      "soal": "LAPAR",
+      "clue": "Perut kosong yang minta diisi makanan"
+    },
+    {
+      "soal": "GARUK",
+      "clue": "Menggosok kulit dengan kuku karena gatal"
+    },
+    {
+      "soal": "MIMPI",
+      "clue": "Cerita aneh yang muncul saat tidur"
+    },
+    {
+      "soal": "KETOMBE",
+      "clue": "Serpihan putih di rambut yang bikin malu"
+    },
+    {
+      "soal": "JERAWAT",
+      "clue": "Benjolan merah di wajah yang bikin kesal"
+    },
+    {
+      "soal": "COMBERAN",
+      "clue": "Saluran air kotor yang bau dan jorok"
+    },
+    {
+      "soal": "NYAMUK",
+      "clue": "Serangga kecil penghisap darah yang bikin gatal"
+    },
+    {
+      "soal": "KECOAK",
+      "clue": "Serangga hitam yang bikin teriak hysteria"
+    },
+    {
+      "soal": "LABA",
+      "clue": "Hewan berkaki delapan yang bikin merinding"
+    },
+    {
+      "soal": "CICAK",
+      "clue": "Reptil kecil di dinding yang kadang jatuh ke kepala"
+    },
+    {
+      "soal": "KAMAR MANDI",
+      "clue": "Tempat manusia melakukan ritual pembersihan diri"
+    },
+    {
+      "soal": "TOILET",
+      "clue": "Tempat pembuangan yang paling privat"
+    },
+    {
+      "soal": "SABUN",
+      "clue": "Benda licin yang sering jatuh saat mandi"
+    },
+    {
+      "soal": "HANDUK",
+      "clue": "Kain untuk mengeringkan badan setelah basah"
+    },
+    {
+      "soal": "SISIR",
+      "clue": "Alat bergigi untuk merapikan rambut"
+    },
+    {
+      "soal": "CERMIN",
+      "clue": "Kaca yang memantulkan wajah tampan/cantik kita"
+    },
+    {
+      "soal": "BANTAL",
+      "clue": "Teman setia kepala saat tidur"
+    },
+    {
+      "soal": "SELIMUT",
+      "clue": "Kain hangat pelindung dari monster malam"
+    }
+  ],
+  "teka_teki": [
+    {
+      "soal": "BAYANGAN",
+      "clue": "Ikut kemana kamu pergi, tapi hilang saat gelap"
+    },
+    {
+      "soal": "CERMIN",
+      "clue": "Meniru semua gerakanmu tapi tidak bisa bicara"
+    },
+    {
+      "soal": "GEMA",
+      "clue": "Meniru suaramu di tempat kosong"
+    },
+    {
+      "soal": "LILIN",
+      "clue": "Semakin dipakai semakin pendek"
+    },
+    {
+      "soal": "WAKTU",
+      "clue": "Terus berjalan tapi tidak pernah capek"
+    },
+    {
+      "soal": "UANG",
+      "clue": "Semakin dibagi semakin berkurang"
+    },
+    {
+      "soal": "RAHASIA",
+      "clue": "Semakin dibagi semakin ringan"
+    },
+    {
+      "soal": "UDARA",
+      "clue": "Ada di mana-mana tapi tidak terlihat"
+    },
+    {
+      "soal": "ANGIN",
+      "clue": "Bisa dirasakan tapi tidak bisa dipegang"
+    },
+    {
+      "soal": "SUARA",
+      "clue": "Bisa didengar tapi tidak bisa dilihat"
+    },
+    {
+      "soal": "LUBANG",
+      "clue": "Semakin besar semakin tidak ada isinya"
+    },
+    {
+      "soal": "DIAM",
+      "clue": "Dipatahkan saat diucapkan"
+    },
+    {
+      "soal": "NAMA",
+      "clue": "Milikmu tapi lebih sering dipakai orang lain"
+    },
+    {
+      "soal": "TIDUR",
+      "clue": "Mata tertutup tapi masih bisa bermimpi"
+    },
+    {
+      "soal": "KENANGAN",
+      "clue": "Ada di masa lalu tapi masih bisa dirasakan sekarang"
+    },
+    {
+      "soal": "HARAPAN",
+      "clue": "Ada di masa depan tapi bisa dirasakan sekarang"
+    },
+    {
+      "soal": "HUJAN",
+      "clue": "Jatuh dari atas tapi tidak pernah sakit"
+    },
+    {
+      "soal": "BINTANG",
+      "clue": "Bersinar di malam hari tapi jauh sekali"
+    },
+    {
+      "soal": "MALAM",
+      "clue": "Datang tanpa diundang, pergi tanpa berpamitan"
+    },
+    {
+      "soal": "SENYUM",
+      "clue": "Tidak bersuara tapi bisa menghangatkan hati"
+    },
+    {
+      "soal": "AIR MATA",
+      "clue": "Keluar saat sedih dan juga saat bahagia"
+    },
+    {
+      "soal": "TAWA",
+      "clue": "Obat terbaik yang tidak perlu resep dokter"
+    },
+    {
+      "soal": "CINTA",
+      "clue": "Tidak bisa dilihat tapi bisa dirasakan"
+    },
+    {
+      "soal": "SABAR",
+      "clue": "Pahit di awal, manis di akhir"
+    },
+    {
+      "soal": "ILMU",
+      "clue": "Semakin dibagi semakin bertambah"
+    }
+  ],
+  "makanan": [
+    {
+      "soal": "RENDANG",
+      "clue": "Masakan daging khas Padang yang berbumbu kental"
+    },
+    {
+      "soal": "GUDEG",
+      "clue": "Makanan manis khas Yogyakarta dari nangka muda"
+    },
+    {
+      "soal": "GADO GADO",
+      "clue": "Salad Indonesia dengan bumbu kacang"
+    },
+    {
+      "soal": "SATE",
+      "clue": "Daging tusuk yang dibakar dengan bumbu kacang"
+    },
+    {
+      "soal": "BAKSO",
+      "clue": "Bola-bola daging dalam kuah panas"
+    },
+    {
+      "soal": "SOTO",
+      "clue": "Sup berkuah kuning dengan isian daging"
+    },
+    {
+      "soal": "PECEL",
+      "clue": "Sayuran rebus dengan sambal kacang pedas"
+    },
+    {
+      "soal": "KETOPRAK",
+      "clue": "Campuran tahu, ketupat, tauge dengan bumbu kacang"
+    },
+    {
+      "soal": "RAWON",
+      "clue": "Sup daging berkuah hitam khas Jawa Timur"
+    },
+    {
+      "soal": "OPOR",
+      "clue": "Masakan berkuah santan putih biasanya untuk lebaran"
+    },
+    {
+      "soal": "KETUPAT",
+      "clue": "Nasi dikukus dalam anyaman daun kelapa"
+    },
+    {
+      "soal": "LONTONG",
+      "clue": "Nasi dikukus dalam daun pisang berbentuk silinder"
+    },
+    {
+      "soal": "KERUPUK",
+      "clue": "Makanan renyah yang digoreng, teman nasi"
+    },
+    {
+      "soal": "TEMPE",
+      "clue": "Makanan fermentasi kedelai khas Indonesia"
+    },
+    {
+      "soal": "TAHU",
+      "clue": "Makanan putih lembut dari kedelai"
+    },
+    {
+      "soal": "NASI UDUK",
+      "clue": "Nasi yang dimasak dengan santan dan rempah"
+    },
+    {
+      "soal": "MIE AYAM",
+      "clue": "Mie dengan topping ayam dan pangsit"
+    },
+    {
+      "soal": "BUBUR AYAM",
+      "clue": "Nasi yang dimasak lembek dengan kuah ayam"
+    },
+    {
+      "soal": "MARTABAK",
+      "clue": "Makanan tebal dengan isian manis atau asin"
+    },
+    {
+      "soal": "CENDOL",
+      "clue": "Es dengan tepung hijau dan santan"
+    },
+    {
+      "soal": "ES CAMPUR",
+      "clue": "Minuman es dengan berbagai macam isian"
+    },
+    {
+      "soal": "KLEPON",
+      "clue": "Kue hijau bulat dengan isian gula merah"
+    },
+    {
+      "soal": "ONDE ONDE",
+      "clue": "Kue bulat dengan wijen di luar dan kacang hijau di dalam"
+    },
+    {
+      "soal": "PISANG GORENG",
+      "clue": "Buah kuning yang dicelup tepung lalu digoreng"
+    },
+    {
+      "soal": "RUJAK",
+      "clue": "Campuran buah dengan bumbu pedas manis asam"
+    }
+  ],
+  "hewan": [
+    {
+      "soal": "KOMODO",
+      "clue": "Kadal raksasa dari Indonesia yang berbisa"
+    },
+    {
+      "soal": "ORANGUTAN",
+      "clue": "Kera besar rambut merah dari Kalimantan"
+    },
+    {
+      "soal": "HARIMAU",
+      "clue": "Kucing besar bergaris hitam orange yang hampir punah"
+    },
+    {
+      "soal": "BADAK",
+      "clue": "Hewan besar bercula satu atau dua di hidung"
+    },
+    {
+      "soal": "TAPIR",
+      "clue": "Hewan hitam putih dengan moncong panjang"
+    },
+    {
+      "soal": "ANOA",
+      "clue": "Kerbau kecil dari Sulawesi"
+    },
+    {
+      "soal": "MACAN",
+      "clue": "Kucing besar totol-totol alias leopard"
+    },
+    {
+      "soal": "BERUANG MADU",
+      "clue": "Beruang kecil berdada kuning pencinta madu"
+    },
+    {
+      "soal": "PENYU",
+      "clue": "Kura-kura laut yang bertelur di pantai"
+    },
+    {
+      "soal": "LUMBA LUMBA",
+      "clue": "Mamalia laut cerdas yang suka melompat"
+    },
+    {
+      "soal": "HIU",
+      "clue": "Predator laut bergigi tajam"
+    },
+    {
+      "soal": "PAUS",
+      "clue": "Mamalia laut terbesar di dunia"
+    },
+    {
+      "soal": "PINGUIN",
+      "clue": "Burung tidak bisa terbang, berbulu hitam putih, hidup di kutub"
+    },
+    {
+      "soal": "KOALA",
+      "clue": "Marsupial Australia pemakan daun eucalyptus"
+    },
+    {
+      "soal": "PANDA",
+      "clue": "Beruang hitam putih pemakan bambu dari China"
+    },
+    {
+      "soal": "JERAPAH",
+      "clue": "Hewan darat tertinggi dengan leher panjang"
+    },
+    {
+      "soal": "ZEBRA",
+      "clue": "Kuda belang hitam putih dari Afrika"
+    },
+    {
+      "soal": "FLAMINGO",
+      "clue": "Burung merah muda berkaki panjang"
+    },
+    {
+      "soal": "MERAK",
+      "clue": "Burung dengan bulu ekor indah seperti kipas"
+    },
+    {
+      "soal": "KELELAWAR",
+      "clue": "Mamalia yang bisa terbang, aktif di malam hari"
+    },
+    {
+      "soal": "LANDAK",
+      "clue": "Hewan berduri yang menggulung saat terancam"
+    },
+    {
+      "soal": "TUPAI",
+      "clue": "Hewan kecil pemanjat pohon penyuka kacang"
+    },
+    {
+      "soal": "MUSANG",
+      "clue": "Hewan nokturnal pemakan buah dan serangga"
+    },
+    {
+      "soal": "IGUANA",
+      "clue": "Kadal besar berjambul yang bisa berenang"
+    },
+    {
+      "soal": "KATAK",
+      "clue": "Amfibi yang berubah dari berudu"
+    }
   ]
 }
