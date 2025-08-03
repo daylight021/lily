@@ -41,6 +41,14 @@ module.exports = {
       const botPrefix = new RegExp("^[" + "/!#$%+£¢€¥^°=¶∆×÷π√✓©®:;?&.\\-".replace(/[|\\{}()[\]^$+*?.\-\^]/g, "\\$&") + "]");
       const isCommand = msg.text && botPrefix.test(msg.text);
 
+      // ========== INISIALISASI GAME OBJECT ==========
+      if (!this.game) {
+        this.game = {};
+      }
+      if (!this.game.tebakkata) {
+        this.game.tebakkata = {};
+      }
+
       // ========== HANDLER UNTUK BUTTON RESPONSE UNO ==========
       if (msg.text && (msg.text.startsWith("Mainkan Kartu ") || msg.text.startsWith("Mainkan Wild ") || msg.text.startsWith("Mainkan +4 Wild "))) {
         console.log(`[BUTTON_HANDLER] UNO card button detected: "${msg.text}" from ${msg.sender}`);
@@ -204,19 +212,60 @@ module.exports = {
       let isBotAdmin = bot.admin === "admin" || bot.admin === "superadmin";
 
       // ========== LOGIKA GAME TEBAK KATA ==========
-      const gameSession = this.game.tebakkata?.[from];
-      if (gameSession && msg.quotedMsg && msg.quotedMsg.key.id === gameSession.questionMsgId) {
+      const gameSession = this.game.tebakkata?.[msg.from];
+      console.log(`[GAME_DEBUG] Game session exists: ${!!gameSession}`);
+      
+      if (gameSession) {
+        console.log(`[GAME_DEBUG] Question msg ID: ${gameSession.questionMsgId}`);
+        console.log(`[GAME_DEBUG] Is quoted: ${!!msg.quoted}`);
+        console.log(`[GAME_DEBUG] Quoted key ID: ${msg.quoted?.key?.id}`);
+        console.log(`[GAME_DEBUG] User answer: "${msg.body?.trim()?.toUpperCase()}"`);
+        console.log(`[GAME_DEBUG] Correct answer: "${gameSession.answer}"`);
+      }
+
+      // Cek apakah ini adalah jawaban untuk game tebak kata
+      if (gameSession && msg.quoted && msg.quoted.key && msg.quoted.key.id === gameSession.questionMsgId) {
         const userAnswer = msg.body.trim().toUpperCase();
-        if (userAnswer === gameSession.answer) {
+        const correctAnswer = gameSession.answer.toUpperCase();
+        
+        console.log(`[GAME_ANSWER] User: ${msg.sender}, Answer: "${userAnswer}", Correct: "${correctAnswer}"`);
+        
+        if (userAnswer === correctAnswer) {
+          // Jawaban benar
           clearTimeout(gameSession.timeout);
 
-          const userPoints = gameSession.sessionScores[sender.id] || 0;
-          gameSession.sessionScores[sender.id] = userPoints + gameSession.points;
+          const userPoints = gameSession.sessionScores[msg.sender] || 0;
+          gameSession.sessionScores[msg.sender] = userPoints + gameSession.points;
 
-          await this.sendMessage(from, { text: `🎉 Benar! Jawaban yang tepat adalah *${gameSession.answer}*.\n\nSelamat *@${sender.id.split('@')[0]}*, kamu mendapatkan *${gameSession.points}* poin!`, mentions: [sender.id] });
+          await this.sendMessage(msg.from, { 
+            text: `🎉 Benar! Jawaban yang tepat adalah *${gameSession.answer}*.\n\nSelamat *@${msg.sender.split('@')[0]}*, kamu mendapatkan *${gameSession.points}* poin!`, 
+            mentions: [msg.sender] 
+          });
 
-          this.commands.get('tebakkata').sendQuestion(this, from);
+          // Lanjut ke soal berikutnya
+          setTimeout(() => {
+            this.commands.get('tebakkata').sendQuestion(this, msg.from);
+          }, 2000);
+        } else {
+          // Jawaban salah - berikan feedback
+          const wrongMessages = [
+            `❌ Salah! Coba lagi ya @${msg.sender.split('@')[0]}!`,
+            `🤔 Belum tepat, @${msg.sender.split('@')[0]}! Pikirkan lagi!`,
+            `❌ Oops! Jawaban kamu belum benar @${msg.sender.split('@')[0]}!`,
+            `🙃 Salah jawab nih @${msg.sender.split('@')[0]}! Coba sekali lagi!`,
+            `❌ Belum benar @${msg.sender.split('@')[0]}! Jangan menyerah!`
+          ];
+          
+          const randomWrongMessage = wrongMessages[Math.floor(Math.random() * wrongMessages.length)];
+          
+          await this.sendMessage(msg.from, { 
+            text: randomWrongMessage, 
+            mentions: [msg.sender] 
+          });
         }
+        
+        // Return early untuk mencegah pesan diproses sebagai command
+        return;
       }
 
       // ========== COMMAND PROCESSING ==========
