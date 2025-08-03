@@ -2,17 +2,45 @@
   "mudah": [
     { "soal": "KUCING", "clue": "Hewan peliharaan yang suka mengejar tikus" },
     { "soal": "BUKU", "clue": "Jendela dunia" },
-    { "soal": "MEJA", "clue": "Perabotan dengan empat kaki untuk menaruh barang" }
+    { "soal": "MEJA", "clue": "Perabotan dengan empat kaki untuk menaruh barang" },
+    { "soal": "MATAHARI", "clue": "Bintang yang menerangi bumi di siang hari" },
+    { "soal": "AIR", "clue": "Cairan yang kita minum setiap hari" },
+    { "soal": "RUMAH", "clue": "Tempat tinggal manusia" },
+    { "soal": "MOBIL", "clue": "Kendaraan beroda empat" },
+    { "soal": "BUNGA", "clue": "Bagian tumbuhan yang berwarna-warni dan harum" },
+    { "soal": "NASI", "clue": "Makanan pokok orang Indonesia dari beras" },
+    { "soal": "SEPATU", "clue": "Alas kaki yang melindungi telapak kaki" },
+    { "soal": "HANDPHONE", "clue": "Alat komunikasi yang bisa dibawa kemana-mana" },
+    { "soal": "KOMPUTER", "clue": "Alat untuk bekerja dan bermain" },
+    { "soal": "KELUARGA", "clue": "Kelompok orang yang berkaitan karena hubungan keluarga" }
   ],
   "menengah": [
     { "soal": "SEMARANG", "clue": "Ibu kota provinsi Jawa Tengah" },
     { "soal": "PELANGI", "clue": "Fenomena optik setelah hujan" },
-    { "soal": "GITAR", "clue": "Alat musik petik dengan enam senar" }
-
+    { "soal": "GITAR", "clue": "Alat musik petik dengan enam senar" },
+    { "soal": "PERPUSTAKAAN", "clue": "Tempat menyimpan dan meminjam buku" },
+    { "soal": "KEMERDEKAAN", "clue": "Kebebasan dari penjajahan yang diperoleh Indonesia pada 17 Agustus" },
+    { "soal": "TEKNOLOGI", "clue": "Penerapan ilmu pengetahuan untuk memecahkan masalah" },
+    { "soal": "PENDIDIKAN", "clue": "Proses pembelajaran untuk mengembangkan kemampuan" },
+    { "soal": "KEBUDAYAAN", "clue": "Hasil karya, rasa, dan cipta masyarakat" },
+    { "soal": "DEMOKRASI", "clue": "Sistem pemerintahan dari rakyat, oleh rakyat, untuk rakyat" },
+    { "soal": "PANCASILA", "clue": "Dasar negara Indonesia yang terdiri dari lima sila" },
+    { "soal": "KEANEKARAGAMAN", "clue": "Keberagaman atau variasi yang ada" },
+    { "soal": "TOLERANSI", "clue": "Sikap menghargai perbedaan" },
+    { "soal": "KREATIVITAS", "clue": "Kemampuan untuk menciptakan sesuatu yang baru" }
   ],
   "sulit": [
     { "soal": "ASTRONAUT", "clue": "Profesi penjelajah luar angkasa" },
     { "soal": "FOTOSINTESIS", "clue": "Proses tumbuhan membuat makanan" },
-    { "soal": "KAMUFLASE", "clue": "Kemampuan hewan menyamar di lingkungannya" }
+    { "soal": "KAMUFLASE", "clue": "Kemampuan hewan menyamar di lingkungannya" },
+    { "soal": "EPISTEMOLOGI", "clue": "Cabang filsafat yang mempelajari tentang pengetahuan" },
+    { "soal": "METAMORFOSIS", "clue": "Proses perubahan bentuk pada makhluk hidup" },
+    { "soal": "BIBLIOGRAFI", "clue": "Daftar buku atau sumber pustaka" },
+    { "soal": "PSIKOLOGI", "clue": "Ilmu yang mempelajari tentang jiwa dan perilaku" },
+    { "soal": "ANTROPOLOGI", "clue": "Ilmu yang mempelajari tentang manusia dan kebudayaannya" },
+    { "soal": "MIKROORGANISME", "clue": "Makhluk hidup yang sangat kecil dan hanya bisa dilihat dengan mikroskop" },
+    { "soal": "EKOSISTEM", "clue": "Sistem yang terbentuk dari hubungan timbal balik antara makhluk hidup dan lingkungannya" },
+    { "soal": "GLOBALISASI", "clue": "Proses integrasi internasional yang terjadi karena pertukaran pandangan dunia" },
+    { "soal": "KONSERVASI", "clue": "Upaya pelestarian dan perlindungan alam" }
   ]
 }
