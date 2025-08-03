@@ -7,23 +7,23 @@ const SPAM_LIMIT = 5;
 const SPAM_COOLDOWN = 10 * 1000;
 
 function isUserSpamming(userId) {
-    if (userSpamData.has(userId)) {
-        const userData = userSpamData.get(userId);
-        const { count, lastCommandTime } = userData;
-        if (Date.now() - lastCommandTime < SPAM_COOLDOWN) {
-            if (count >= SPAM_LIMIT) {
-                userData.lastCommandTime = Date.now();
-                return true; 
-            }
-            userData.count++;
-        } else {
-            userData.count = 1;
-            userData.lastCommandTime = Date.now();
-        }
+  if (userSpamData.has(userId)) {
+    const userData = userSpamData.get(userId);
+    const { count, lastCommandTime } = userData;
+    if (Date.now() - lastCommandTime < SPAM_COOLDOWN) {
+      if (count >= SPAM_LIMIT) {
+        userData.lastCommandTime = Date.now();
+        return true;
+      }
+      userData.count++;
     } else {
-        userSpamData.set(userId, { count: 1, lastCommandTime: Date.now() });
+      userData.count = 1;
+      userData.lastCommandTime = Date.now();
     }
-    return false;
+  } else {
+    userSpamData.set(userId, { count: 1, lastCommandTime: Date.now() });
+  }
+  return false;
 }
 
 module.exports = {
@@ -43,29 +43,29 @@ module.exports = {
       // ========== HANDLER UNTUK BUTTON RESPONSE UNO ==========
       if (msg.text && (msg.text.startsWith("Mainkan Kartu ") || msg.text.startsWith("Mainkan Wild ") || msg.text.startsWith("Mainkan +4 Wild "))) {
         console.log(`[BUTTON_HANDLER] UNO card button detected: "${msg.text}" from ${msg.sender}`);
-        
+
         // Pastikan ini adalah pesan dari PM (bukan grup)
         if (msg.isGroup) {
           console.log(`[BUTTON_HANDLER] Ignoring UNO button from group`);
           return;
         }
-        
+
         try {
           // Ambil command uno
           const unoCommand = this.commands.get('uno');
           if (unoCommand) {
             console.log(`[COMMAND] Executing uno with button response`);
-            
+
             // Execute uno command dengan button response
-            const extra = { 
-              bot: this, 
+            const extra = {
+              bot: this,
               usedPrefix: '.', // Default prefix untuk uno
-              participants: [], 
-              groupMetadata: null, 
+              participants: [],
+              groupMetadata: null,
               args: [], // Tidak perlu args karena akan dihandle oleh logic uno.js
-              command: 'uno' 
+              command: 'uno'
             };
-            
+
             return await unoCommand.execute.call(this, msg, extra);
           } else {
             console.log(`[ERROR] uno command not found in commands collection`);
@@ -80,30 +80,30 @@ module.exports = {
       // ========== HANDLER UNTUK BUTTON RESPONSE YOUTUBE VIDEO ==========
       if (msg.text && msg.text.startsWith("Download ") && msg.text.match(/Download (2160p|1440p|1080p60|1080p|720p60|720p|480p|360p|240p|144p)/)) {
         console.log(`[BUTTON_HANDLER] YouTube video button detected: "${msg.text}" from ${msg.sender}`);
-        
+
         // Cek apakah user memiliki session YouTube yang aktif
         if (global.ytSessions && global.ytSessions[msg.sender]) {
           console.log(`[SESSION] Found active ytmp4 session for ${msg.sender}: ${global.ytSessions[msg.sender].url}`);
-          
+
           try {
             // Ambil command ytmp4
             const ytmp4Command = this.commands.get('ytmp4');
             if (ytmp4Command) {
               console.log(`[COMMAND] Executing ytmp4 with button response`);
-              
+
               // Buat args dengan format button response
               const fakeArgs = [msg.text];
-              
+
               // Execute ytmp4 command dengan button response
-              const extra = { 
-                bot: this, 
+              const extra = {
+                bot: this,
                 usedPrefix: '/', // Default prefix
-                participants: [], 
-                groupMetadata: null, 
-                args: fakeArgs, 
-                command: 'ytmp4' 
+                participants: [],
+                groupMetadata: null,
+                args: fakeArgs,
+                command: 'ytmp4'
               };
-              
+
               return await ytmp4Command.execute.call(this, msg, extra);
             } else {
               console.log(`[ERROR] ytmp4 command not found in commands collection`);
@@ -123,30 +123,30 @@ module.exports = {
       // ========== HANDLER UNTUK BUTTON RESPONSE YOUTUBE AUDIO ==========
       if (msg.text && msg.text.startsWith("Download Audio ") && msg.text.match(/Download Audio (\d+kbps)/)) {
         console.log(`[BUTTON_HANDLER] YouTube audio button detected: "${msg.text}" from ${msg.sender}`);
-        
+
         // Cek apakah user memiliki session YouTube Audio yang aktif
         if (global.ytmp3Sessions && global.ytmp3Sessions[msg.sender]) {
           console.log(`[SESSION] Found active ytmp3 session for ${msg.sender}: ${global.ytmp3Sessions[msg.sender].url}`);
-          
+
           try {
             // Ambil command ytmp3
             const ytmp3Command = this.commands.get('ytmp3') || this.commands.get('yta');
             if (ytmp3Command) {
               console.log(`[COMMAND] Executing ytmp3 with button response`);
-              
+
               // Buat args dengan format button response
               const fakeArgs = [msg.text];
-              
+
               // Execute ytmp3 command dengan button response
-              const extra = { 
-                bot: this, 
+              const extra = {
+                bot: this,
                 usedPrefix: '/', // Default prefix
-                participants: [], 
-                groupMetadata: null, 
-                args: fakeArgs, 
-                command: 'ytmp3' 
+                participants: [],
+                groupMetadata: null,
+                args: fakeArgs,
+                command: 'ytmp3'
               };
-              
+
               return await ytmp3Command.execute.call(this, msg, extra);
             } else {
               console.log(`[ERROR] ytmp3 command not found in commands collection`);
@@ -172,12 +172,12 @@ module.exports = {
 
       // ========== SPAM CHECK ==========
       if (isCommand) {
-          if (isUserSpamming(msg.sender)) {
-              if (userSpamData.get(msg.sender).count === SPAM_LIMIT) {
-                  return msg.reply("⚠️ Anda mengirim perintah terlalu cepat! Mohon tunggu beberapa saat.");
-              }
-              return;
+        if (isUserSpamming(msg.sender)) {
+          if (userSpamData.get(msg.sender).count === SPAM_LIMIT) {
+            return msg.reply("⚠️ Anda mengirim perintah terlalu cepat! Mohon tunggu beberapa saat.");
           }
+          return;
+        }
       }
 
       require("./DatabaseHandler")(msg, this);
@@ -188,26 +188,44 @@ module.exports = {
 
       // --- Ambil metadata HANYA JIKA DIPERLUKAN ---
       if (isCommand || msg.isGroup) {
-          try {
-              groupMetadata = msg.isGroup ? await getGroupMetadata(msg.from, this) : null;
-          } catch (e) {
-              console.error(`Gagal mengambil metadata untuk grup ${msg.from}:`, e);
-              // Biarkan groupMetadata tetap null jika gagal
-          }
+        try {
+          groupMetadata = msg.isGroup ? await getGroupMetadata(msg.from, this) : null;
+        } catch (e) {
+          console.error(`Gagal mengambil metadata untuk grup ${msg.from}:`, e);
+          // Biarkan groupMetadata tetap null jika gagal
+        }
       }
-      
+
       let participants = groupMetadata?.participants || [];
       let user = participants.find((u) => u.id == msg.sender) || {};
       let bot = participants.find((u) => u.id == Serializer.decodeJid(this.user.id)) || {};
       let isAdmin = user.admin === "admin" || user.admin === "superadmin";
       let isBotAdmin = bot.admin === "admin" || bot.admin === "superadmin";
 
+      const gameSession = bot.game.tebakkata?.[from];
+      if (gameSession && msg.quotedMsg && msg.quotedMsg.id.id === gameSession.questionMsgId) {
+        const userAnswer = msg.body.trim().toUpperCase();
+        if (userAnswer === gameSession.answer) {
+          // Hentikan timer lama
+          clearTimeout(gameSession.timeout);
+
+          // Tambah poin untuk user di sesi ini
+          const userPoints = gameSession.sessionScores[sender.id] || 0;
+          gameSession.sessionScores[sender.id] = userPoints + gameSession.points;
+
+          await bot.sendMessage(from, { text: `🎉 Benar! Jawaban yang tepat adalah *${gameSession.answer}*.\n\nSelamat *@${sender.id.split('@')[0]}*, kamu mendapatkan *${gameSession.points}* poin!`, mentions: [sender.id] });
+
+          // Kirim soal berikutnya
+          bot.commands.get('tebakkata').sendQuestion(bot, from);
+        }
+      }
+
       // ========== COMMAND PROCESSING ==========
       if (isCommand) {
         const usedPrefix = msg.text.match(botPrefix)[0];
         const args = msg.text.slice(usedPrefix.length).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();
-        
+
         if (!this.commands.has(commandName)) return;
         const command = this.commands.get(commandName);
 
