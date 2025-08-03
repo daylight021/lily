@@ -238,14 +238,22 @@ module.exports = {
           gameSession.sessionScores[msg.sender] = userPoints + gameSession.points;
 
           await this.sendMessage(msg.from, { 
-            text: `🎉 Benar! Jawaban yang tepat adalah *${gameSession.answer}*.\n\nSelamat *@${msg.sender.split('@')[0]}*, kamu mendapatkan *${gameSession.points}* poin!`, 
+            text: `🎉 *BENAR!* 🎉\n\n` +
+                  `Jawaban: *${gameSession.answer}*\n` +
+                  `Level: ${gameSession.level}\n` +
+                  `Poin: *+${gameSession.points}*\n\n` +
+                  `🏆 Selamat @${msg.sender.split('@')[0]}!\n` +
+                  `💫 Total poin kamu: *${gameSession.sessionScores[msg.sender]}*\n\n` +
+                  `🔄 *Bersiap untuk soal berikutnya...*`, 
             mentions: [msg.sender] 
           });
 
-          // Lanjut ke soal berikutnya
+          // Lanjut ke soal berikutnya setelah 3 detik
           setTimeout(() => {
-            this.commands.get('tebakkata').sendQuestion(this, msg.from);
-          }, 2000);
+            if (this.game.tebakkata[msg.from]) { // Pastikan game masih aktif
+              this.commands.get('tebakkata').sendQuestion(this, msg.from);
+            }
+          }, 3000);
         } else {
           // Jawaban salah - berikan feedback
           const wrongMessages = [
@@ -253,7 +261,9 @@ module.exports = {
             `🤔 Belum tepat, @${msg.sender.split('@')[0]}! Pikirkan lagi!`,
             `❌ Oops! Jawaban kamu belum benar @${msg.sender.split('@')[0]}!`,
             `🙃 Salah jawab nih @${msg.sender.split('@')[0]}! Coba sekali lagi!`,
-            `❌ Belum benar @${msg.sender.split('@')[0]}! Jangan menyerah!`
+            `❌ Belum benar @${msg.sender.split('@')[0]}! Jangan menyerah!`,
+            `🔄 Coba lagi @${msg.sender.split('@')[0]}! Kamu pasti bisa!`,
+            `💭 Hmm, belum tepat @${msg.sender.split('@')[0]}! Baca clue lagi!`
           ];
           
           const randomWrongMessage = wrongMessages[Math.floor(Math.random() * wrongMessages.length)];
