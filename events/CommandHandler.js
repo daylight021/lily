@@ -203,21 +203,21 @@ module.exports = {
       let isAdmin = user.admin === "admin" || user.admin === "superadmin";
       let isBotAdmin = bot.admin === "admin" || bot.admin === "superadmin";
 
-    // ========== LOGIKA GAME TEBAK KATA ==========
-    const gameSession = this.game.tebakkata?.[from];
-    if (gameSession && msg.quotedMsg && msg.quotedMsg.id.id === gameSession.questionMsgId) {
+      // ========== LOGIKA GAME TEBAK KATA ==========
+      const gameSession = this.game.tebakkata?.[from];
+      if (gameSession && msg.quotedMsg && msg.quotedMsg.key.id === gameSession.questionMsgId) {
         const userAnswer = msg.body.trim().toUpperCase();
         if (userAnswer === gameSession.answer) {
-            clearTimeout(gameSession.timeout);
+          clearTimeout(gameSession.timeout);
 
-            const userPoints = gameSession.sessionScores[sender.id] || 0;
-            gameSession.sessionScores[sender.id] = userPoints + gameSession.points;
+          const userPoints = gameSession.sessionScores[sender.id] || 0;
+          gameSession.sessionScores[sender.id] = userPoints + gameSession.points;
 
-            await this.sendMessage(from, { text: `🎉 Benar! Jawaban yang tepat adalah *${gameSession.answer}*.\n\nSelamat *@${sender.id.split('@')[0]}*, kamu mendapatkan *${gameSession.points}* poin!`, mentions: [sender.id] });
-            
-            this.commands.get('tebakkata').sendQuestion(this, from);
+          await this.sendMessage(from, { text: `🎉 Benar! Jawaban yang tepat adalah *${gameSession.answer}*.\n\nSelamat *@${sender.id.split('@')[0]}*, kamu mendapatkan *${gameSession.points}* poin!`, mentions: [sender.id] });
+
+          this.commands.get('tebakkata').sendQuestion(this, from);
         }
-    }
+      }
 
       // ========== COMMAND PROCESSING ==========
       if (isCommand) {
