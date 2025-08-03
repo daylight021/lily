@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
+// Path ke file soal, pastikan lokasinya benar (sejajar dengan database.json)
 const soalPath = path.join(__dirname, '..', '..', 'lib', 'tebakkata-soal.json');
 const allSoal = JSON.parse(fs.readFileSync(soalPath));
 
@@ -59,6 +60,7 @@ async function sendQuestion(bot, groupId) {
     gameSession.points = points;
     gameSession.questionMsgId = message.key.id;
     gameSession.level = randomLevel;
+    gameSession.isAnswered = false; // Reset flag untuk soal baru
 
     console.log(`[GAME_QUESTION] Sent question #${gameSession.questionCount}, ID: ${message.key.id}, Answer: ${currentSoal.soal}`);
 
@@ -177,7 +179,8 @@ module.exports = {
                 questionMsgId: null,
                 timeout: null,
                 questionCount: 0,
-                level: null
+                level: null,
+                isAnswered: false // Flag untuk mencegah multiple answers
             };
 
             // Tag semua member grup dengan pesan ajakan
