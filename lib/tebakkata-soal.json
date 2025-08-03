@@ -1,0 +1,18 @@
+{
+  "mudah": [
+    { "soal": "KUCING", "clue": "Hewan peliharaan yang suka mengejar tikus" },
+    { "soal": "BUKU", "clue": "Jendela dunia" },
+    { "soal": "MEJA", "clue": "Perabotan dengan empat kaki untuk menaruh barang" }
+  ],
+  "menengah": [
+    { "soal": "SEMARANG", "clue": "Ibu kota provinsi Jawa Tengah" },
+    { "soal": "PELANGI", "clue": "Fenomena optik setelah hujan" },
+    { "soal": "GITAR", "clue": "Alat musik petik dengan enam senar" }
+
+  ],
+  "sulit": [
+    { "soal": "ASTRONAUT", "clue": "Profesi penjelajah luar angkasa" },
+    { "soal": "FOTOSINTESIS", "clue": "Proses tumbuhan membuat makanan" },
+    { "soal": "KAMUFLASE", "clue": "Kemampuan hewan menyamar di lingkungannya" }
+  ]
+}
