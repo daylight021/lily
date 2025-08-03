@@ -228,9 +228,27 @@ module.exports = {
         const userAnswer = msg.body.trim().toUpperCase();
         const correctAnswer = gameSession.answer.toUpperCase();
         
-        console.log(`[GAME_ANSWER] User: ${msg.sender}, Answer: "${userAnswer}", Correct: "${correctAnswer}"`);
+        console.log(`[GAME_ANSWER] User: ${msg.sender}, Answer: "${userAnswer}", Correct: "${correctAnswer}", Already answered: ${gameSession.isAnswered}`);
+        
+        // Cek apakah soal sudah dijawab oleh orang lain
+        if (gameSession.isAnswered) {
+          // Jika user memberikan jawaban benar tapi terlambat
+          if (userAnswer === correctAnswer) {
+            await this.sendMessage(msg.from, { 
+              text: `⏰ *Terlambat!* @${msg.sender.split('@')[0]}\n\n` +
+                    `Jawaban kamu benar, tapi seseorang sudah menjawab lebih dulu!\n` +
+                    `💨 Bersiaplah untuk soal berikutnya!`, 
+              mentions: [msg.sender] 
+            });
+          }
+          console.log(`[GAME_ANSWER] Question already answered, ignoring response from ${msg.sender}`);
+          return; // Abaikan jawaban jika soal sudah dijawab
+        }
         
         if (userAnswer === correctAnswer) {
+          // Tandai soal sudah dijawab SEGERA untuk mencegah race condition
+          gameSession.isAnswered = true;
+          
           // Jawaban benar
           clearTimeout(gameSession.timeout);
 
