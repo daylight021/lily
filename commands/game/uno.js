@@ -15,12 +15,20 @@ const valueToString = (value) => {
 const colorToString = (color) => color.toLowerCase();
 const cardToFileName = (card) => card.isWild ? `${valueToString(card.value)}.png` : `${colorToString(card.color)}_${valueToString(card.value)}.png`;
 
+// Fungsi untuk tag semua member grup (seperti hidetag)
+function getAllMembers(participants) {
+    return participants
+        .filter((participant) => participant.admin !== "superadmin" && participant.admin !== "admin")
+        .map((participant) => participant.id);
+}
+
 /**
  * Fungsi untuk mengirim kartu pemain ke private message (PM)
  * @param {object} bot Objek bot Baileys
  * @param {object} player Objek pemain (id, name, hand)
  * @param {object} game Objek game saat ini
  */
+
 async function sendPlayerCards(bot, player, game) {
     try {
         const topCard = game.getTopCard();
@@ -451,7 +459,10 @@ module.exports = {
                 bot.uno[from] = new Game(from, sender);
                 game = bot.uno[from];
                 game.addPlayer({ id: sender, name: senderName });
-                msg.reply(`✅ Lobi UNO berhasil dibuat oleh ${senderName}!\n\nPemain lain bisa bergabung dengan mengetik \`.uno join\`.`);
+                const allMembers = getAllMembers(participants);
+                const lobby_msg = `✅ Lobi UNO berhasil dibuat oleh ${senderName}!\n\nPemain lain bisa bergabung dengan mengetik \`.uno join\`.`;  
+                msg.reply(lobby_msg);
+                await bot.sendMessage(from, { text: lobby_msg, mentions: allMembers });
                 break;
 
             case 'join': {
