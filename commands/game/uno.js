@@ -281,7 +281,7 @@ module.exports = {
     alias: ['uno'],
     description: 'Mainkan game UNO dengan teman-temanmu!',
     category: 'game',
-    execute: async (msg, { bot, args, usedPrefix }) => {
+    execute: async (msg, { bot, args, usedPrefix, participants }) => {
         const { from, sender, body } = msg;
         const senderName = msg.pushName || msg.senderName || sender.split('@')[0] || 'Pemain';
         bot.uno = bot.uno || {};
@@ -603,4 +603,5 @@ module.exports = {
                 break;
         }
     }
+
 };
