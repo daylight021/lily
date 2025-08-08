@@ -1,5 +1,6 @@
 const Serializer = require("../lib/Serializer");
 const { getGroupMetadata } = require("../lib/CachedGroupMetadata");
+const similarity = require('similarity'); // Tambahkan dependency untuk family100
 
 // Anti-banjir global
 const userSpamData = new Map();
@@ -26,6 +27,138 @@ function isUserSpamming(userId) {
   return false;
 }
 
+// ========== FAMILY100 HELPER FUNCTIONS ==========
+const threshold = 0.72; // Nilai similarity untuk jawaban yang hampir benar
+
+async function handleFamily100Answer(msg, bot) {
+  try {
+    // Cek apakah ada game family100 yang aktif di grup ini
+    if (!bot.game || !bot.game.family100 || !bot.game.family100[msg.from]) {
+      return false; // Tidak ada game aktif
+    }
+
+    const gameSession = bot.game.family100[msg.from];
+    if (!gameSession || !gameSession.jawaban) return false;
+
+    const userAnswer = msg.body.toLowerCase().replace(/[^\w\s\-]+/g, '').trim();
+    const isSurrender = /^((me)?nyerah|surr?ender)$/i.test(msg.body);
+
+    if (isSurrender) {
+      // Handle surrender
+      const family100Command = bot.commands.get('family100');
+      if (family100Command) {
+        await family100Command.endGame(bot, msg.from, 'surrender');
+      }
+      return true;
+    }
+
+    // Cek apakah jawaban exact match
+    let answerIndex = gameSession.jawaban.findIndex(jawaban => 
+      jawaban.toLowerCase().replace(/[^\w\s\-]+/g, '') === userAnswer
+    );
+
+    // Jika tidak exact match, cek similarity
+    if (answerIndex < 0) {
+      const similarities = gameSession.jawaban.map(jawaban => 
+        similarity(jawaban.toLowerCase().replace(/[^\w\s\-]+/g, ''), userAnswer)
+      );
+      const maxSimilarity = Math.max(...similarities);
+      
+      if (maxSimilarity >= threshold) {
+        answerIndex = similarities.indexOf(maxSimilarity);
+        // Kirim feedback "hampir benar"
+        await bot.sendMessage(msg.from, {
+          text: `💡 Hampir benar! Coba lagi dengan kata yang lebih tepat!`
+        });
+      }
+      
+      if (answerIndex < 0 || gameSession.terjawab[answerIndex]) {
+        return false; // Jawaban salah atau sudah terjawab
+      }
+    }
+
+    // Jika jawaban sudah terjawab sebelumnya
+    if (gameSession.terjawab[answerIndex]) {
+      await bot.sendMessage(msg.from, {
+        text: `❌ Jawaban "${gameSession.jawaban[answerIndex]}" sudah dijawab oleh @${gameSession.answeredBy[answerIndex].split('@')[0]}!`,
+        mentions: [gameSession.answeredBy[answerIndex]]
+      });
+      return true;
+    }
+
+    // Jawaban benar!
+    gameSession.terjawab[answerIndex] = true;
+    gameSession.answeredBy[answerIndex] = msg.sender;
+    gameSession.correctAnswers++;
+
+    // Update skor session
+    if (!gameSession.sessionScores[msg.sender]) {
+      gameSession.sessionScores[msg.sender] = 0;
+    }
+    gameSession.sessionScores[msg.sender] += 1000; // 1000 poin per jawaban
+
+    // Reset timeout karena ada aktivitas
+    if (gameSession.timeout) {
+      clearTimeout(gameSession.timeout);
+      gameSession.timeout = setTimeout(() => {
+        const family100Command = bot.commands.get('family100');
+        if (family100Command) {
+          family100Command.endGame(bot, msg.from, 'timeout');
+        }
+      }, 120000);
+    }
+
+    // Cek apakah sudah semua terjawab
+    const isComplete = gameSession.terjawab.every(Boolean);
+    
+    // Show current status
+    let statusText = `🎯 *FAMILY 100* ${isComplete ? '✅' : '📊'}\n\n`;
+    statusText += `❓ *Soal:* ${gameSession.soal}\n\n`;
+
+    // Tampilkan jawaban
+    statusText += `📋 *Jawaban* (${gameSession.correctAnswers}/${gameSession.totalAnswers}):\n`;
+    gameSession.jawaban.forEach((jawaban, index) => {
+      if (gameSession.terjawab[index]) {
+        statusText += `✅ (${index + 1}) ${jawaban} - @${gameSession.answeredBy[index].split('@')[0]}\n`;
+      } else {
+        statusText += `❌ (${index + 1}) _______________\n`;
+      }
+    });
+
+    if (isComplete) {
+      statusText += `\n🎉 *SEMUA JAWABAN TERJAWAB!*\n`;
+      statusText += `🚀 Soal berikutnya akan muncul dalam 3 detik...\n`;
+    } else {
+      statusText += `\n💰 *1000* poin per jawaban benar\n`;
+      statusText += `⏰ Game berlanjut... Cari jawaban yang tersisa!\n`;
+    }
+
+    const mentions = gameSession.answeredBy.filter(Boolean);
+    await bot.sendMessage(msg.from, { 
+      text: statusText, 
+      mentions: [...new Set(mentions)]
+    });
+
+    if (isComplete) {
+      // Lanjut ke soal berikutnya setelah 3 detik
+      setTimeout(() => {
+        if (bot.game.family100[msg.from]) {
+          const family100Command = bot.commands.get('family100');
+          if (family100Command) {
+            family100Command.sendQuestion(bot, msg.from);
+          }
+        }
+      }, 3000);
+    }
+
+    return true;
+
+  } catch (error) {
+    console.error('Error handling Family 100 answer:', error);
+    return false;
+  }
+}
+
 module.exports = {
   async chatUpdate(messages) {
     const msg = await Serializer.serializeMessage(this, messages.messages[0]);
@@ -47,6 +180,20 @@ module.exports = {
       }
       if (!this.game.tebakkata) {
         this.game.tebakkata = {};
+      }
+      if (!this.game.family100) {
+        this.game.family100 = {};
+      }
+
+      // ========== SPAM CHECK - DIPINDAH KE ATAS SEBELUM BUTTON HANDLERS ==========
+      // Spam check dilakukan early untuk mencegah spam pada semua jenis interaksi
+      if (isCommand) {
+        if (isUserSpamming(msg.sender)) {
+          if (userSpamData.get(msg.sender).count === SPAM_LIMIT) {
+            return msg.reply("⚠️ Anda mengirim perintah terlalu cepat! Mohon tunggu beberapa saat.");
+          }
+          return;
+        }
       }
 
       // ========== HANDLER UNTUK BUTTON RESPONSE UNO ==========
@@ -179,16 +326,6 @@ module.exports = {
         // Tambahkan handler untuk button lainnya jika diperlukan
       }
 
-      // ========== SPAM CHECK ==========
-      if (isCommand) {
-        if (isUserSpamming(msg.sender)) {
-          if (userSpamData.get(msg.sender).count === SPAM_LIMIT) {
-            return msg.reply("⚠️ Anda mengirim perintah terlalu cepat! Mohon tunggu beberapa saat.");
-          }
-          return;
-        }
-      }
-
       require("./DatabaseHandler")(msg, this);
       require("./AFKHandler")(msg, this);
 
@@ -210,6 +347,16 @@ module.exports = {
       let bot = participants.find((u) => u.id == Serializer.decodeJid(this.user.id)) || {};
       let isAdmin = user.admin === "admin" || user.admin === "superadmin";
       let isBotAdmin = bot.admin === "admin" || bot.admin === "superadmin";
+
+      // ========== HANDLER FAMILY100 ANSWER ==========
+      // Cek family100 answer SEBELUM memproses game tebak kata dan command lain
+      if (!isCommand) { // Hanya proses jika bukan command
+        const isFamily100Answer = await handleFamily100Answer(msg, this);
+        if (isFamily100Answer) {
+          console.log(`[FAMILY100] Answer processed for ${msg.sender}: "${msg.body}"`);
+          return; // Stop processing jika ini adalah jawaban family100
+        }
+      }
 
       // ========== LOGIKA GAME TEBAK KATA ==========
       const gameSession = this.game.tebakkata?.[msg.from];
