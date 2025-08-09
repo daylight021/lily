@@ -137,17 +137,27 @@ module.exports = {
         // Fetch sticker pack info
         const packInfo = await getTelegramStickerPack(packName, botToken);
         const firstSticker = packInfo.stickers[0];
-        const previewUrl = `https://tlgrm.eu/stickers/preview/${firstSticker.set_name.replace(/_/g, '-')}/thumb.png`;
+
+        let thumbnailBuffer = null;
+        let thumbnailId = firstSticker.thumb?.file_id || firstSticker.file_id;
+
+        try {
+            if (thumbnailId) {
+                // Gunakan downloadTelegramFile untuk mendapatkan thumbnail
+                thumbnailBuffer = await downloadTelegramFile(thumbnailId, botToken);
+            }
+        } catch (downloadError) {
+            console.error("Gagal mendownload thumbnail dari Telegram API:", downloadError);
+            // Lanjutkan tanpa thumbnail jika gagal
+        }
 
         // Simpan data ke session
         global.telegramStickerSessions[msg.sender] = {
           packInfo: packInfo,
           botToken: botToken,
-          timestamp: Date.now(),
-          previewUrl: previewUrl // Simpan URL preview
+          timestamp: Date.now()
         };
 
-        // Buat button confirmation dengan gambar preview
         const buttonMessage = {
           caption: `📦 *Sticker Pack Ditemukan!*\n\n` +
                   `🎯 *Nama:* ${packInfo.title}\n` +
@@ -164,9 +174,13 @@ module.exports = {
             buttonText: { displayText: "Aku mau" },
             type: 1
           }],
-          image: { url: previewUrl },
           headerType: 4
         };
+
+        if (thumbnailBuffer) {
+            buttonMessage.image = thumbnailBuffer;
+            buttonMessage.headerType = 4;
+        }
 
         await bot.sendMessage(msg.from, buttonMessage, { quoted: msg });
         await msg.react("✅");
