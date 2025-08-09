@@ -144,7 +144,7 @@ module.exports = {
           timestamp: Date.now()
         };
         
-        // Buat button confirmation
+        // Buat button confirmation dengan format yang sama seperti ytmp3.js
         const buttonMessage = {
           caption: `📦 *Sticker Pack Ditemukan!*\n\n` +
                   `🎯 *Nama:* ${packInfo.title}\n` +
