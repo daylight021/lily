@@ -319,6 +319,37 @@ module.exports = {
         }
       }
 
+      // ========== HANDLER UNTUK BUTTON RESPONSE TELEGRAM STICKER ==========
+      if (msg.text && msg.text === "Aku mau") {
+        console.log(`[BUTTON_HANDLER] Telegram sticker button detected: "${msg.text}" from ${msg.sender}`);
+
+        // Cek apakah user memiliki session Telegram sticker yang aktif
+        if (global.telegramStickerSessions && global.telegramStickerSessions[msg.sender]) {
+          console.log(`[SESSION] Found active telegram sticker session for ${msg.sender}`);
+
+          try {
+            // Ambil command sticker
+            const stickerCommand = this.commands.get('sticker') || this.commands.get('s');
+            if (stickerCommand && stickerCommand.downloadAllStickers) {
+              console.log(`[COMMAND] Executing telegram sticker download`);
+
+              // Execute downloadAllStickers function
+              return await stickerCommand.downloadAllStickers(this, msg);
+            } else {
+              console.log(`[ERROR] sticker command or downloadAllStickers function not found`);
+              return msg.reply("❌ Command sticker tidak ditemukan atau fungsi download tidak tersedia.");
+            }
+          } catch (error) {
+            console.error('Error handling Telegram sticker button response:', error);
+            return msg.reply("❌ Terjadi kesalahan saat memproses download sticker pack Telegram.");
+          }
+        } else {
+          console.log(`[SESSION] No active telegram sticker session found for ${msg.sender}`);
+          console.log(`[SESSION] Available telegram sticker sessions:`, Object.keys(global.telegramStickerSessions || {}));
+          return msg.reply("❌ Session expired. Silakan kirim ulang perintah download sticker pack.");
+        }
+      }
+
       // ========== ADDITIONAL BUTTON HANDLERS ==========
       // Handler untuk button response lainnya bisa ditambahkan di sini
       if (msg.text && msg.text.startsWith("Download ") && !msg.text.match(/Download (2160p|1440p|1080p60|1080p|720p60|720p|480p|360p|240p|144p|Audio \d+kbps)/)) {
