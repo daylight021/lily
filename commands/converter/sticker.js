@@ -25,14 +25,14 @@ async function downloadTelegramFile(fileId, botToken) {
         if (!fileResponse.data.ok) {
             throw new Error(`Gagal mendapatkan file path: ${fileResponse.data.description}`);
         }
-        
+
         const filePath = fileResponse.data.result.file_path;
-        
+
         // Download file
         const downloadResponse = await axios.get(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {
             responseType: 'arraybuffer'
         });
-        
+
         return Buffer.from(downloadResponse.data);
     } catch (error) {
         throw new Error(`Error downloading file: ${error.message}`);
@@ -43,17 +43,17 @@ async function downloadTelegramFile(fileId, botToken) {
 async function getTelegramStickerPack(packName, botToken) {
     try {
         const response = await axios.get(`https://api.telegram.org/bot${botToken}/getStickerSet?name=${packName}`);
-        
+
         if (!response.data.ok) {
             throw new Error(`Sticker pack tidak ditemukan: ${response.data.description}`);
         }
-        
+
         const stickerSet = response.data.result;
         const stickers = stickerSet.stickers;
-        
+
         let staticCount = 0;
         let animatedCount = 0;
-        
+
         stickers.forEach(sticker => {
             if (sticker.is_animated || sticker.is_video) {
                 animatedCount++;
@@ -61,7 +61,7 @@ async function getTelegramStickerPack(packName, botToken) {
                 staticCount++;
             }
         });
-        
+
         return {
             title: stickerSet.title,
             name: stickerSet.name,
@@ -111,11 +111,11 @@ module.exports = {
   execute: async (msg, { bot, args }) => {
     const action = args[0]; // -get
     const telegramUrl = args[1]; // URL Telegram sticker pack
-    
+
     // Handle Telegram sticker pack download
     if (action === '-get' && telegramUrl) {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      
+
       if (!botToken) {
         return msg.reply("❌ Telegram Bot Token tidak ditemukan. Pastikan TELEGRAM_BOT_TOKEN sudah diset di environment variables.\n\n" +
                         "📝 Cara mendapatkan token:\n" +
@@ -124,27 +124,30 @@ module.exports = {
                         "3. Ikuti instruksi untuk buat bot\n" +
                         "4. Copy token yang diberikan");
       }
-      
+
       const packName = extractStickerPackName(telegramUrl);
       if (!packName) {
         return msg.reply("❌ Format URL tidak valid. Gunakan format: https://t.me/addstickers/packname\n\n" +
                         "Contoh: `.s -get https://t.me/addstickers/c1129234339_by_HarukaAyaBot`");
       }
-      
+
       await msg.react("⏳");
-      
+
       try {
         // Fetch sticker pack info
         const packInfo = await getTelegramStickerPack(packName, botToken);
-        
+        const firstSticker = packInfo.stickers[0];
+        const previewUrl = `https://tlgrm.eu/stickers/preview/${firstSticker.set_name.replace(/_/g, '-')}/thumb.png`;
+
         // Simpan data ke session
         global.telegramStickerSessions[msg.sender] = {
           packInfo: packInfo,
           botToken: botToken,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          previewUrl: previewUrl // Simpan URL preview
         };
-        
-        // Buat button confirmation dengan format yang sama seperti ytmp3.js
+
+        // Buat button confirmation dengan gambar preview
         const buttonMessage = {
           caption: `📦 *Sticker Pack Ditemukan!*\n\n` +
                   `🎯 *Nama:* ${packInfo.title}\n` +
@@ -161,27 +164,28 @@ module.exports = {
             buttonText: { displayText: "Aku mau" },
             type: 1
           }],
-          headerType: 1
+          image: { url: previewUrl },
+          headerType: 4
         };
 
         await bot.sendMessage(msg.from, buttonMessage, { quoted: msg });
         await msg.react("✅");
-        
+
         // Set timeout untuk menghapus session setelah 5 menit
         setTimeout(() => {
           if (global.telegramStickerSessions && global.telegramStickerSessions[msg.sender]) {
             delete global.telegramStickerSessions[msg.sender];
           }
         }, 5 * 60 * 1000); // 5 menit
-        
+
         return;
-        
+
       } catch (error) {
         console.error("Error fetching Telegram sticker pack:", error);
         await msg.react("⚠️");
-        
+
         let errorMessage = "❌ Gagal mengambil sticker pack dari Telegram.\n\n";
-        
+
         if (error.message.includes('Unauthorized')) {
           errorMessage += "*Alasan:* Bot token tidak valid atau expired.\n" +
                          "Periksa kembali TELEGRAM_BOT_TOKEN.";
@@ -191,14 +195,14 @@ module.exports = {
         } else {
           errorMessage += `*Alasan:* ${error.message}`;
         }
-        
+
         return msg.reply(errorMessage);
       }
     }
-    
+
     // Original sticker creation logic (unchanged)
     let targetMsg = msg.quoted || msg;
-    
+
     const validTypes = ['imageMessage', 'videoMessage', 'documentMessage'];
     if (!validTypes.includes(targetMsg.type)) {
         return msg.reply("❌ Kirim atau reply media yang valid dengan caption `.s`.\n\n" +
@@ -260,29 +264,29 @@ module.exports = {
       return msg.reply("❌ Gagal membuat stiker. Pastikan media valid.");
     }
   },
-  
+
   // Function untuk handle download semua sticker (dipanggil dari CommandHandler)
   downloadAllStickers: async function(bot, msg) {
     const sessionData = global.telegramStickerSessions[msg.sender];
     if (!sessionData) {
       return msg.reply("❌ Session expired. Silakan kirim ulang perintah download sticker pack.");
     }
-    
+
     const { packInfo, botToken } = sessionData;
     const stickers = packInfo.stickers;
-    
+
     await msg.reply(`🚀 *Memulai download ${packInfo.totalCount} sticker...*\n\n` +
                    `📦 Pack: ${packInfo.title}\n` +
                    `⏱️ Estimasi waktu: ${Math.ceil(packInfo.totalCount * 2)} detik\n` +
                    `🔄 Proses dimulai...`);
-    
+
     let successCount = 0;
     let failedCount = 0;
-    
+
     for (let i = 0; i < stickers.length; i++) {
       const sticker = stickers[i];
       const stickerNum = i + 1;
-      
+
       try {
         // Update progress setiap 5 sticker
         if (stickerNum % 5 === 0 || stickerNum === 1) {
@@ -290,38 +294,38 @@ module.exports = {
             text: `📊 Progress: ${stickerNum}/${packInfo.totalCount} sticker...`
           });
         }
-        
+
         // Download sticker dari Telegram
         const stickerBuffer = await downloadTelegramFile(sticker.file_id, botToken);
-        
+
         // Tentukan apakah animated atau static
         const isAnimated = sticker.is_animated || sticker.is_video;
-        
+
         // Konversi dan kirim sticker
         const success = await convertAndSendSticker(
-          bot, 
-          msg.from, 
-          stickerBuffer, 
-          isAnimated, 
+          bot,
+          msg.from,
+          stickerBuffer,
+          isAnimated,
           `Sticker ${stickerNum}`,
           msg
         );
-        
+
         if (success) {
           successCount++;
         } else {
           failedCount++;
         }
-        
+
         // Delay untuk anti-spam (1.5 detik per sticker)
         if (i < stickers.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 1500));
         }
-        
+
       } catch (error) {
         console.error(`Error processing sticker ${stickerNum}:`, error);
         failedCount++;
-        
+
         // Jika error terlalu banyak, stop process
         if (failedCount > 5) {
           await msg.reply(`⚠️ Terlalu banyak error. Menghentikan proses.\n\n` +
@@ -331,7 +335,7 @@ module.exports = {
         }
       }
     }
-    
+
     // Summary
     await msg.reply(`🎉 *Download selesai!*\n\n` +
                    `📦 Pack: ${packInfo.title}\n` +
@@ -339,7 +343,7 @@ module.exports = {
                    `❌ Gagal: ${failedCount}\n` +
                    `📊 Total: ${packInfo.totalCount} sticker\n\n` +
                    `🙏 Terima kasih telah menggunakan layanan download sticker pack!`);
-    
+
     // Clear session
     if (global.telegramStickerSessions[msg.sender]) {
       delete global.telegramStickerSessions[msg.sender];
