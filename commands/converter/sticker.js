@@ -75,7 +75,7 @@ async function getTelegramStickerPack(packName, botToken) {
     }
 }
 
-// Function untuk konversi dan kirim sticker
+// Function untuk konversi dan kirim sticker dengan background transparan
 async function convertAndSendSticker(bot, chatId, stickerBuffer, isAnimated, stickerTitle, quotedMsg) {
     try {
         let sticker;
@@ -84,16 +84,23 @@ async function convertAndSendSticker(bot, chatId, stickerBuffer, isAnimated, sti
             author: process.env.stickerAuthor || "Dari Telegram",
             type: StickerTypes.FULL,
             quality: 90,
+            background: 'transparent', // Pastikan background transparan
         };
 
         if (isAnimated) {
-            // Untuk animated sticker, gunakan fungsi video
+            // Untuk animated sticker, gunakan fungsi video dengan background transparan
             console.log("Membuat animated sticker dari Telegram...");
-            sticker = await createStickerFromVideo(stickerBuffer, stickerOptions);
+            sticker = await createStickerFromVideo(stickerBuffer, {
+                ...stickerOptions,
+                preserveTransparency: true
+            });
         } else {
-            // Untuk static sticker
+            // Untuk static sticker, pastikan background transparan
             console.log("Membuat static sticker dari Telegram...");
-            sticker = new Sticker(stickerBuffer, stickerOptions);
+            sticker = new Sticker(stickerBuffer, {
+                ...stickerOptions,
+                background: 'transparent'
+            });
         }
 
         await bot.sendMessage(chatId, await sticker.toMessage(), { quoted: quotedMsg });
@@ -158,6 +165,10 @@ module.exports = {
           timestamp: Date.now()
         };
 
+        // Hitung jumlah untuk berbagai opsi
+        const halfCount = Math.ceil(packInfo.totalCount / 2);
+        const quarterCount = Math.ceil(packInfo.totalCount / 4);
+
         const buttonMessage = {
           caption: `📦 *Sticker Pack Ditemukan!*\n\n` +
                   `🎯 *Nama:* ${packInfo.title}\n` +
@@ -166,16 +177,45 @@ module.exports = {
                   `🖼️ Sticker biasa: ${packInfo.staticCount}\n` +
                   `🎬 Sticker animasi: ${packInfo.animatedCount}\n` +
                   `📈 Total sticker: ${packInfo.totalCount}\n\n` +
-                  `❓ *Apakah kamu ingin mendapatkan semua stikernya?*\n` +
-                  `⚠️ Proses ini akan memakan waktu tergantung jumlah sticker.`,
+                  `❓ *Pilih opsi download:*\n` +
+                  `⚠️ Proses akan memakan waktu tergantung jumlah sticker.`,
           footer: "Telegram Sticker Downloader",
-          buttons: [{
-            buttonId: `telegram_sticker_download`,
-            buttonText: { displayText: "Aku mau" },
-            type: 1
-          }],
+          buttons: [
+            {
+              buttonId: `telegram_sticker_all`,
+              buttonText: { displayText: `📦 Semua (${packInfo.totalCount})` },
+              type: 1
+            },
+            {
+              buttonId: `telegram_sticker_half`,
+              buttonText: { displayText: `📦 ${halfCount} Sticker` },
+              type: 1
+            },
+            {
+              buttonId: `telegram_sticker_quarter`,
+              buttonText: { displayText: `📦 ${quarterCount} Sticker` },
+              type: 1
+            }
+          ],
           headerType: 4
         };
+
+        // Tambahkan button untuk animated dan static jika ada
+        if (packInfo.animatedCount > 0) {
+          buttonMessage.buttons.push({
+            buttonId: `telegram_sticker_animated`,
+            buttonText: { displayText: `🎬 Animasi (${packInfo.animatedCount})` },
+            type: 1
+          });
+        }
+
+        if (packInfo.staticCount > 0) {
+          buttonMessage.buttons.push({
+            buttonId: `telegram_sticker_static`,
+            buttonText: { displayText: `🖼️ Statis (${packInfo.staticCount})` },
+            type: 1
+          });
+        }
 
         if (thumbnailBuffer) {
             buttonMessage.image = thumbnailBuffer;
@@ -251,15 +291,22 @@ module.exports = {
             author: process.env.stickerAuthor || "Dibuat oleh Bot",
             type: StickerTypes.FULL,
             quality: 90,
+            background: 'transparent', // Pastikan background transparan
         };
 
         // --- GUNAKAN FUNGSI BERBEDA UNTUK VIDEO ---
         if (isVideo) {
             console.log("Membuat stiker dari video menggunakan logika kustom...");
-            sticker = await createStickerFromVideo(buffer, stickerOptions);
+            sticker = await createStickerFromVideo(buffer, {
+                ...stickerOptions,
+                preserveTransparency: true
+            });
         } else {
             console.log("Membuat stiker dari gambar menggunakan logika standar...");
-            sticker = new Sticker(buffer, stickerOptions);
+            sticker = new Sticker(buffer, {
+                ...stickerOptions,
+                background: 'transparent'
+            });
         }
 
         await bot.sendMessage(msg.from, await sticker.toMessage(), { quoted: msg });
@@ -279,33 +326,71 @@ module.exports = {
     }
   },
 
-  // Function untuk handle download semua sticker (dipanggil dari CommandHandler)
-  downloadAllStickers: async function(bot, msg) {
+  // Function untuk handle download dengan berbagai opsi
+  downloadStickers: async function(bot, msg, option) {
     const sessionData = global.telegramStickerSessions[msg.sender];
     if (!sessionData) {
       return msg.reply("❌ Session expired. Silakan kirim ulang perintah download sticker pack.");
     }
 
     const { packInfo, botToken } = sessionData;
-    const stickers = packInfo.stickers;
+    let stickersToDownload = [];
+    let optionText = "";
 
-    await msg.reply(`🚀 *Memulai download ${packInfo.totalCount} sticker...*\n\n` +
+    // Tentukan sticker mana yang akan didownload berdasarkan opsi
+    switch (option) {
+      case 'all':
+        stickersToDownload = packInfo.stickers;
+        optionText = `semua ${packInfo.totalCount} sticker`;
+        break;
+      
+      case 'half':
+        const halfCount = Math.ceil(packInfo.totalCount / 2);
+        stickersToDownload = packInfo.stickers.slice(0, halfCount);
+        optionText = `${halfCount} sticker (setengah)`;
+        break;
+      
+      case 'quarter':
+        const quarterCount = Math.ceil(packInfo.totalCount / 4);
+        stickersToDownload = packInfo.stickers.slice(0, quarterCount);
+        optionText = `${quarterCount} sticker (seperempat)`;
+        break;
+      
+      case 'animated':
+        stickersToDownload = packInfo.stickers.filter(s => s.is_animated || s.is_video);
+        optionText = `${stickersToDownload.length} sticker animasi`;
+        break;
+      
+      case 'static':
+        stickersToDownload = packInfo.stickers.filter(s => !s.is_animated && !s.is_video);
+        optionText = `${stickersToDownload.length} sticker statis`;
+        break;
+      
+      default:
+        return msg.reply("❌ Opsi download tidak valid.");
+    }
+
+    if (stickersToDownload.length === 0) {
+      return msg.reply(`❌ Tidak ada sticker untuk opsi "${option}" yang dipilih.`);
+    }
+
+    await msg.reply(`🚀 *Memulai download ${optionText}...*\n\n` +
                    `📦 Pack: ${packInfo.title}\n` +
-                   `⏱️ Estimasi waktu: ${Math.ceil(packInfo.totalCount * 2)} detik\n` +
+                   `⏱️ Estimasi waktu: ${Math.ceil(stickersToDownload.length * 2)} detik\n` +
                    `🔄 Proses dimulai...`);
 
     let successCount = 0;
     let failedCount = 0;
 
-    for (let i = 0; i < stickers.length; i++) {
-      const sticker = stickers[i];
+    for (let i = 0; i < stickersToDownload.length; i++) {
+      const sticker = stickersToDownload[i];
       const stickerNum = i + 1;
 
       try {
         // Update progress setiap 5 sticker
         if (stickerNum % 5 === 0 || stickerNum === 1) {
           await bot.sendMessage(msg.from, {
-            text: `📊 Progress: ${stickerNum}/${packInfo.totalCount} sticker...`
+            text: `📊 Progress: ${stickerNum}/${stickersToDownload.length} sticker (${optionText})...`
           });
         }
 
@@ -315,7 +400,7 @@ module.exports = {
         // Tentukan apakah animated atau static
         const isAnimated = sticker.is_animated || sticker.is_video;
 
-        // Konversi dan kirim sticker
+        // Konversi dan kirim sticker dengan background transparan
         const success = await convertAndSendSticker(
           bot,
           msg.from,
@@ -332,7 +417,7 @@ module.exports = {
         }
 
         // Delay untuk anti-spam (1.5 detik per sticker)
-        if (i < stickers.length - 1) {
+        if (i < stickersToDownload.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 1500));
         }
 
@@ -353,14 +438,20 @@ module.exports = {
     // Summary
     await msg.reply(`🎉 *Download selesai!*\n\n` +
                    `📦 Pack: ${packInfo.title}\n` +
+                   `🎯 Opsi: ${optionText}\n` +
                    `✅ Berhasil: ${successCount}\n` +
                    `❌ Gagal: ${failedCount}\n` +
-                   `📊 Total: ${packInfo.totalCount} sticker\n\n` +
+                   `📊 Total diproses: ${stickersToDownload.length} sticker\n\n` +
                    `🙏 Terima kasih telah menggunakan layanan download sticker pack!`);
 
     // Clear session
     if (global.telegramStickerSessions[msg.sender]) {
       delete global.telegramStickerSessions[msg.sender];
     }
+  },
+
+  // Fungsi lama untuk backward compatibility
+  downloadAllStickers: async function(bot, msg) {
+    return this.downloadStickers(bot, msg, 'all');
   }
 };
