@@ -1,6 +1,6 @@
 const { Sticker, StickerTypes } = require("wa-sticker-formatter");
 const { downloadMediaMessage } = require("lily-baileys");
-const { createStickerFromVideo, createStickerFromTGS } = require("../../lib/sticker1.js");
+const { createStickerFromVideo, createStickerFromTGS } = require("../../lib/sticker.js");
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
