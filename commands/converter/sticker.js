@@ -4,6 +4,13 @@ const { createStickerFromVideo, createStickerFromTGS } = require("../../lib/stic
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+
+// Membuat agent HTTP/HTTPS dengan keepAlive
+const httpsAgent = new https.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 60000 // Jaga koneksi tetap hidup selama 60 detik
+});
 
 const TEMP_DIR = path.join(__dirname, '../../temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -23,7 +30,8 @@ async function downloadTelegramFile(sticker, botToken) {
         const fileId = sticker.file_id;
         
         const fileInfoResponse = await axios.get(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`, {
-            timeout: 10000
+            timeout: 15000, // Timeout ditingkatkan
+            httpsAgent // Gunakan agent keepAlive
         });
         
         if (!fileInfoResponse.data.ok) {
@@ -51,7 +59,7 @@ async function downloadTelegramFile(sticker, botToken) {
             throw new Error(`File terlalu besar: ${fileSize} bytes`);
         }
 
-        const maxRetries = 3;
+        const maxRetries = 5; // Jumlah retry ditingkatkan
         let lastError;
         
         for (let i = 0; i < maxRetries; i++) {
@@ -60,8 +68,9 @@ async function downloadTelegramFile(sticker, botToken) {
                 
                 const downloadResponse = await axios.get(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {
                     responseType: 'arraybuffer',
-                    timeout: 30000,
-                    maxContentLength: 10 * 1024 * 1024
+                    timeout: 45000, // Timeout ditingkatkan untuk download
+                    maxContentLength: 10 * 1024 * 1024,
+                    httpsAgent // Gunakan agent keepAlive
                 });
 
                 const buffer = Buffer.from(downloadResponse.data);
@@ -83,7 +92,9 @@ async function downloadTelegramFile(sticker, botToken) {
                 lastError = downloadError;
                 
                 if (i < maxRetries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+                    const delay = 3000 * Math.pow(2, i); // Backoff eksponensial
+                    console.log(`Retrying in ${delay / 1000} seconds...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
         }
