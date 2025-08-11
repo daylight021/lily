@@ -17,24 +17,73 @@ function extractStickerPackName(url) {
     return match ? match[1] : null;
 }
 
-// Helper function untuk download file dari Telegram
+// Helper function untuk download file dari Telegram dengan validation
 async function downloadTelegramFile(fileId, botToken) {
     try {
+        console.log(`Downloading Telegram file: ${fileId}`);
+        
         // Get file path from Telegram API
-        const fileResponse = await axios.get(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+        const fileResponse = await axios.get(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`, {
+            timeout: 10000
+        });
+        
         if (!fileResponse.data.ok) {
             throw new Error(`Gagal mendapatkan file path: ${fileResponse.data.description}`);
         }
 
         const filePath = fileResponse.data.result.file_path;
+        const fileSize = fileResponse.data.result.file_size || 0;
+        
+        console.log(`File path: ${filePath}, size: ${fileSize} bytes`);
 
-        // Download file
-        const downloadResponse = await axios.get(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {
-            responseType: 'arraybuffer'
-        });
+        // Validasi ukuran file
+        if (fileSize > 5 * 1024 * 1024) { // 5MB limit
+            throw new Error(`File terlalu besar: ${fileSize} bytes`);
+        }
 
-        return Buffer.from(downloadResponse.data);
+        // Download file dengan timeout dan retry
+        const maxRetries = 3;
+        let lastError;
+        
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                console.log(`Download attempt ${i + 1}/${maxRetries}`);
+                
+                const downloadResponse = await axios.get(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {
+                    responseType: 'arraybuffer',
+                    timeout: 30000, // 30 seconds timeout
+                    maxContentLength: 5 * 1024 * 1024 // 5MB limit
+                });
+
+                const buffer = Buffer.from(downloadResponse.data);
+                
+                // Validasi buffer
+                if (buffer.length === 0) {
+                    throw new Error("Downloaded file is empty");
+                }
+                
+                if (buffer.length !== fileSize && fileSize > 0) {
+                    console.warn(`File size mismatch: expected ${fileSize}, got ${buffer.length}`);
+                }
+                
+                console.log(`File downloaded successfully: ${buffer.length} bytes`);
+                return buffer;
+                
+            } catch (downloadError) {
+                console.error(`Download attempt ${i + 1} failed:`, downloadError.message);
+                lastError = downloadError;
+                
+                if (i < maxRetries - 1) {
+                    // Wait before retry
+                    await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+                }
+            }
+        }
+        
+        throw lastError;
+
     } catch (error) {
+        console.error("Error downloading Telegram file:", error);
         throw new Error(`Error downloading file: ${error.message}`);
     }
 }
@@ -42,7 +91,9 @@ async function downloadTelegramFile(fileId, botToken) {
 // Function untuk mendapatkan sticker pack dari Telegram
 async function getTelegramStickerPack(packName, botToken) {
     try {
-        const response = await axios.get(`https://api.telegram.org/bot${botToken}/getStickerSet?name=${packName}`);
+        const response = await axios.get(`https://api.telegram.org/bot${botToken}/getStickerSet?name=${packName}`, {
+            timeout: 10000
+        });
 
         if (!response.data.ok) {
             throw new Error(`Sticker pack tidak ditemukan: ${response.data.description}`);
@@ -75,39 +126,85 @@ async function getTelegramStickerPack(packName, botToken) {
     }
 }
 
-// Function untuk konversi dan kirim sticker dengan background transparan
+// Function untuk konversi dan kirim sticker dengan error handling yang lebih baik
 async function convertAndSendSticker(bot, chatId, stickerBuffer, isAnimated, stickerTitle, quotedMsg) {
     try {
+        console.log(`Converting sticker: ${stickerTitle} (animated: ${isAnimated})`);
+        
+        // Validasi buffer terlebih dahulu
+        if (!stickerBuffer || stickerBuffer.length === 0) {
+            throw new Error("Buffer sticker kosong");
+        }
+        
+        if (stickerBuffer.length < 50) {
+            throw new Error("Buffer sticker terlalu kecil, kemungkinan rusak");
+        }
+
         let sticker;
         const stickerOptions = {
             pack: process.env.stickerPackname || "Telegram Stiker",
             author: process.env.stickerAuthor || "Dari Telegram",
             type: StickerTypes.FULL,
             quality: 90,
-            background: 'transparent', // Pastikan background transparan
+            background: 'transparent',
+            preserveTransparency: true
         };
 
         if (isAnimated) {
-            // Untuk animated sticker, gunakan fungsi video dengan background transparan
-            console.log("Membuat animated sticker dari Telegram...");
-            sticker = await createStickerFromVideo(stickerBuffer, {
-                ...stickerOptions,
-                preserveTransparency: true
-            });
+            console.log("Creating animated sticker with transparency...");
+            
+            try {
+                sticker = await createStickerFromVideo(stickerBuffer, stickerOptions);
+            } catch (animatedError) {
+                console.error("Animated sticker creation failed:", animatedError);
+                
+                // Fallback ke sticker static jika animated gagal
+                console.log("Trying static sticker as fallback...");
+                sticker = new Sticker(stickerBuffer, {
+                    ...stickerOptions,
+                    background: 'transparent'
+                });
+            }
         } else {
-            // Untuk static sticker, pastikan background transparan
-            console.log("Membuat static sticker dari Telegram...");
+            console.log("Creating static sticker with transparency...");
             sticker = new Sticker(stickerBuffer, {
                 ...stickerOptions,
                 background: 'transparent'
             });
         }
 
-        await bot.sendMessage(chatId, await sticker.toMessage(), { quoted: quotedMsg });
+        // Test sticker creation sebelum kirim
+        const stickerMessage = await sticker.toMessage();
+        
+        if (!stickerMessage || !stickerMessage.sticker) {
+            throw new Error("Sticker message creation failed");
+        }
+
+        await bot.sendMessage(chatId, stickerMessage, { quoted: quotedMsg });
+        console.log(`Sticker sent successfully: ${stickerTitle}`);
         return true;
+        
     } catch (error) {
         console.error(`Error converting sticker "${stickerTitle}":`, error);
-        return false;
+        
+        // Try basic fallback
+        try {
+            console.log(`Trying basic fallback for ${stickerTitle}...`);
+            const basicSticker = new Sticker(stickerBuffer, {
+                pack: "Telegram",
+                author: "Import",
+                type: StickerTypes.FULL,
+                quality: 70
+            });
+            
+            await bot.sendMessage(chatId, await basicSticker.toMessage(), { quoted: quotedMsg });
+            console.log(`Basic fallback successful for ${stickerTitle}`);
+            return true;
+            
+        } catch (fallbackError) {
+            console.error(`All fallback methods failed for ${stickerTitle}:`, fallbackError);
+            return false;
+        }
     }
 }
 
@@ -178,7 +275,8 @@ module.exports = {
                   `🎬 Sticker animasi: ${packInfo.animatedCount}\n` +
                   `📈 Total sticker: ${packInfo.totalCount}\n\n` +
                   `❓ *Pilih opsi download:*\n` +
-                  `⚠️ Proses akan memakan waktu tergantung jumlah sticker.`,
+                  `⚠️ Proses akan memakan waktu tergantung jumlah sticker.\n` +
+                  `🎨 Semua sticker akan diproses dengan background transparan.`,
           footer: "Telegram Sticker Downloader",
           buttons: [
             {
@@ -254,7 +352,7 @@ module.exports = {
       }
     }
 
-    // Original sticker creation logic (unchanged)
+    // Original sticker creation logic untuk regular media
     let targetMsg = msg.quoted || msg;
 
     const validTypes = ['imageMessage', 'videoMessage', 'documentMessage'];
@@ -262,7 +360,8 @@ module.exports = {
         return msg.reply("❌ Kirim atau reply media yang valid dengan caption `.s`.\n\n" +
                         "💡 *Fitur Telegram Sticker Pack:*\n" +
                         "• `.s -get <URL>` - Download sticker pack dari Telegram\n" +
-                        "• Contoh: `.s -get https://t.me/addstickers/packname`");
+                        "• Contoh: `.s -get https://t.me/addstickers/packname`\n\n" +
+                        "🎨 Semua sticker dibuat dengan background transparan.");
     }
 
     let isVideo = targetMsg.type === 'videoMessage';
@@ -285,24 +384,25 @@ module.exports = {
             { reuploadRequest: bot.updateMediaMessage }
         );
 
+        if (!buffer || buffer.length === 0) {
+            throw new Error("Gagal mendownload media atau file kosong");
+        }
+
         let sticker;
         const stickerOptions = {
             pack: process.env.stickerPackname || "Bot Stiker",
             author: process.env.stickerAuthor || "Dibuat oleh Bot",
             type: StickerTypes.FULL,
             quality: 90,
-            background: 'transparent', // Pastikan background transparan
+            background: 'transparent',
+            preserveTransparency: true
         };
 
-        // --- GUNAKAN FUNGSI BERBEDA UNTUK VIDEO ---
         if (isVideo) {
-            console.log("Membuat stiker dari video menggunakan logika kustom...");
-            sticker = await createStickerFromVideo(buffer, {
-                ...stickerOptions,
-                preserveTransparency: true
-            });
+            console.log("Creating video sticker with transparency...");
+            sticker = await createStickerFromVideo(buffer, stickerOptions);
         } else {
-            console.log("Membuat stiker dari gambar menggunakan logika standar...");
+            console.log("Creating image sticker with transparency...");
             sticker = new Sticker(buffer, {
                 ...stickerOptions,
                 background: 'transparent'
@@ -313,16 +413,24 @@ module.exports = {
         await msg.react("✅");
 
     } catch (err) {
-      console.error("Kesalahan saat konversi stiker:", err);
+      console.error("Error creating sticker:", err);
       await msg.react("⚠️");
-      // Memberikan pesan error yang lebih spesifik jika ffmpeg tidak ada
+      
+      let errorMessage = "❌ Gagal membuat stiker. ";
+      
       if (err.message.includes('ffmpeg')) {
-          return msg.reply("❌ Gagal membuat stiker video. Pastikan FFmpeg sudah terinstal di server.");
+          errorMessage += "Pastikan FFmpeg sudah terinstal di server.";
+      } else if (err.message.includes('too large') || err.message.includes('terlalu besar')) {
+          errorMessage += "Ukuran media terlalu besar.";
+      } else if (err.message.includes('Invalid data') || err.message.includes('rusak')) {
+          errorMessage += "File media rusak atau format tidak didukung.";
+      } else if (err.message.includes('kosong')) {
+          errorMessage += "File media kosong atau tidak valid.";
+      } else {
+          errorMessage += "Pastikan media valid dan coba lagi.";
       }
-      if (err.message.includes('too large')) {
-          return msg.reply("❌ Gagal membuat stiker. Ukuran media terlalu besar.");
-      }
-      return msg.reply("❌ Gagal membuat stiker. Pastikan media valid.");
+      
+      return msg.reply(errorMessage);
     }
   },
 
@@ -376,29 +484,54 @@ module.exports = {
 
     await msg.reply(`🚀 *Memulai download ${optionText}...*\n\n` +
                    `📦 Pack: ${packInfo.title}\n` +
-                   `⏱️ Estimasi waktu: ${Math.ceil(stickersToDownload.length * 2)} detik\n` +
+                   `⏱️ Estimasi waktu: ${Math.ceil(stickersToDownload.length * 3)} detik\n` +
+                   `🎨 Background transparan: ✅\n` +
                    `🔄 Proses dimulai...`);
 
     let successCount = 0;
     let failedCount = 0;
+    let skippedCount = 0;
 
     for (let i = 0; i < stickersToDownload.length; i++) {
       const sticker = stickersToDownload[i];
       const stickerNum = i + 1;
+      const isAnimated = sticker.is_animated || sticker.is_video;
 
       try {
-        // Update progress setiap 5 sticker
-        if (stickerNum % 5 === 0 || stickerNum === 1) {
+        // Update progress setiap 3 sticker atau sticker pertama
+        if (stickerNum % 3 === 0 || stickerNum === 1) {
           await bot.sendMessage(msg.from, {
-            text: `📊 Progress: ${stickerNum}/${stickersToDownload.length} sticker (${optionText})...`
+            text: `📊 Progress: ${stickerNum}/${stickersToDownload.length}\n` +
+                  `✅ Berhasil: ${successCount} | ❌ Gagal: ${failedCount}\n` +
+                  `🎬 Sedang memproses: ${isAnimated ? 'Animasi' : 'Statis'}`
           });
         }
 
-        // Download sticker dari Telegram
-        const stickerBuffer = await downloadTelegramFile(sticker.file_id, botToken);
+        console.log(`Processing sticker ${stickerNum}/${stickersToDownload.length}: ${isAnimated ? 'animated' : 'static'}`);
 
-        // Tentukan apakah animated atau static
-        const isAnimated = sticker.is_animated || sticker.is_video;
+        // Download sticker dari Telegram dengan retry
+        let stickerBuffer;
+        try {
+          stickerBuffer = await downloadTelegramFile(sticker.file_id, botToken);
+        } catch (downloadError) {
+          console.error(`Download failed for sticker ${stickerNum}:`, downloadError);
+          failedCount++;
+          continue;
+        }
+
+        // Validasi buffer
+        if (!stickerBuffer || stickerBuffer.length === 0) {
+          console.error(`Empty buffer for sticker ${stickerNum}`);
+          failedCount++;
+          continue;
+        }
+
+        // Skip sticker yang terlalu besar
+        if (stickerBuffer.length > 5 * 1024 * 1024) { // 5MB
+          console.log(`Skipping oversized sticker ${stickerNum}: ${stickerBuffer.length} bytes`);
+          skippedCount++;
+          continue;
+        }
 
         // Konversi dan kirim sticker dengan background transparan
         const success = await convertAndSendSticker(
@@ -406,7 +539,7 @@ module.exports = {
           msg.from,
           stickerBuffer,
           isAnimated,
-          `Sticker ${stickerNum}`,
+          `${packInfo.title} - Sticker ${stickerNum}`,
           msg
         );
 
@@ -416,33 +549,39 @@ module.exports = {
           failedCount++;
         }
 
-        // Delay untuk anti-spam (1.5 detik per sticker)
+        // Delay untuk anti-spam (2 detik per sticker untuk animated, 1.5 untuk static)
         if (i < stickersToDownload.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          const delay = isAnimated ? 2500 : 1500;
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
 
       } catch (error) {
-        console.error(`Error processing sticker ${stickerNum}:`, error);
+        console.error(`Unexpected error processing sticker ${stickerNum}:`, error);
         failedCount++;
 
-        // Jika error terlalu banyak, stop process
-        if (failedCount > 5) {
-          await msg.reply(`⚠️ Terlalu banyak error. Menghentikan proses.\n\n` +
+        // Jika error rate terlalu tinggi, berhenti
+        if (failedCount > Math.ceil(stickersToDownload.length * 0.5)) {
+          await msg.reply(`⚠️ Terlalu banyak error (>50%). Menghentikan proses.\n\n` +
                          `✅ Berhasil: ${successCount}\n` +
-                         `❌ Gagal: ${failedCount}`);
+                         `❌ Gagal: ${failedCount}\n` +
+                         `⏭️ Dilewati: ${skippedCount}`);
           break;
         }
       }
     }
 
-    // Summary
+    // Summary report
+    const successRate = Math.round((successCount / stickersToDownload.length) * 100);
     await msg.reply(`🎉 *Download selesai!*\n\n` +
                    `📦 Pack: ${packInfo.title}\n` +
                    `🎯 Opsi: ${optionText}\n` +
                    `✅ Berhasil: ${successCount}\n` +
                    `❌ Gagal: ${failedCount}\n` +
-                   `📊 Total diproses: ${stickersToDownload.length} sticker\n\n` +
-                   `🙏 Terima kasih telah menggunakan layanan download sticker pack!`);
+                   `⏭️ Dilewati: ${skippedCount}\n` +
+                   `📊 Total diproses: ${stickersToDownload.length}\n` +
+                   `📈 Success rate: ${successRate}%\n\n` +
+                   `🎨 Semua sticker dibuat dengan background transparan\n` +
+                   `🙏 Terima kasih telah menggunakan layanan download!`);
 
     // Clear session
     if (global.telegramStickerSessions[msg.sender]) {
