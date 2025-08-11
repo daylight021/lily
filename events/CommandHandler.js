@@ -1,6 +1,6 @@
 const Serializer = require("../lib/Serializer");
 const { getGroupMetadata } = require("../lib/CachedGroupMetadata");
-const similarity = require('similarity'); // Tambahkan dependency untuk family100
+const similarity = require('similarity');
 
 // Anti-banjir global
 const userSpamData = new Map();
@@ -185,7 +185,7 @@ module.exports = {
         this.game.family100 = {};
       }
 
-      // ========== SPAM CHECK - DIPINDAH KE ATAS SEBELUM BUTTON HANDLERS ==========
+      // ========== SPAM CHECK ==========
       // Spam check dilakukan early untuk mencegah spam pada semua jenis interaksi
       if (isCommand) {
         if (isUserSpamming(msg.sender)) {
@@ -319,8 +319,14 @@ module.exports = {
         }
       }
 
-      // ========== HANDLER UNTUK BUTTON RESPONSE TELEGRAM STICKER ==========
-      if (msg.text && msg.text === "Aku mau") {
+      // ========== HANDLER UNTUK BUTTON RESPONSE TELEGRAM STICKER - ALL OPTIONS ==========
+      if (msg.text && (
+        msg.text.startsWith("📦 Semua ") ||
+        msg.text.match(/^📦 \d+ Sticker$/) ||
+        msg.text.startsWith("🎬 Animasi ") ||
+        msg.text.startsWith("🖼️ Statis ") ||
+        msg.text === "Aku mau" // Backward compatibility
+      )) {
         console.log(`[BUTTON_HANDLER] Telegram sticker button detected: "${msg.text}" from ${msg.sender}`);
 
         // Cek apakah user memiliki session Telegram sticker yang aktif
@@ -330,13 +336,43 @@ module.exports = {
           try {
             // Ambil command sticker
             const stickerCommand = this.commands.get('sticker') || this.commands.get('s');
-            if (stickerCommand && stickerCommand.downloadAllStickers) {
-              console.log(`[COMMAND] Executing telegram sticker download`);
+            if (stickerCommand && stickerCommand.downloadStickers) {
+              console.log(`[COMMAND] Executing telegram sticker download with option: ${msg.text}`);
 
-              // Execute downloadAllStickers function
-              return await stickerCommand.downloadAllStickers(this, msg);
+              // Tentukan opsi download berdasarkan button text
+              let downloadOption = 'all'; // default
+              
+              if (msg.text.startsWith("📦 Semua ")) {
+                downloadOption = 'all';
+              } else if (msg.text.match(/^📦 \d+ Sticker$/)) {
+                // Cek apakah ini half atau quarter berdasarkan jumlah
+                const sessionData = global.telegramStickerSessions[msg.sender];
+                if (sessionData && sessionData.packInfo) {
+                  const totalCount = sessionData.packInfo.totalCount;
+                  const halfCount = Math.ceil(totalCount / 2);
+                  const quarterCount = Math.ceil(totalCount / 4);
+                  const buttonNumber = parseInt(msg.text.match(/^📦 (\d+) Sticker$/)[1]);
+                  
+                  if (buttonNumber === halfCount) {
+                    downloadOption = 'half';
+                  } else if (buttonNumber === quarterCount) {
+                    downloadOption = 'quarter';
+                  } else {
+                    downloadOption = 'all'; // fallback
+                  }
+                }
+              } else if (msg.text.startsWith("🎬 Animasi ")) {
+                downloadOption = 'animated';
+              } else if (msg.text.startsWith("🖼️ Statis ")) {
+                downloadOption = 'static';
+              } else if (msg.text === "Aku mau") {
+                downloadOption = 'all'; // Backward compatibility
+              }
+
+              // Execute downloadStickers function dengan opsi yang sesuai
+              return await stickerCommand.downloadStickers(this, msg, downloadOption);
             } else {
-              console.log(`[ERROR] sticker command or downloadAllStickers function not found`);
+              console.log(`[ERROR] sticker command or downloadStickers function not found`);
               return msg.reply("❌ Command sticker tidak ditemukan atau fungsi download tidak tersedia.");
             }
           } catch (error) {
