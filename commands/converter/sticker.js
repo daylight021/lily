@@ -31,6 +31,7 @@ async function downloadTelegramFile(sticker, botToken) {
     const format = filePath.endsWith('.tgs') ? 'tgs'
                  : filePath.endsWith('.webm') ? 'webm'
                  : filePath.endsWith('.webp') ? 'webp'
+                 : filePath.endsWith('.mp4') ? 'mp4'
                  : 'unknown';
 
     const downloadResponse = await axios.get(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {
@@ -50,10 +51,20 @@ async function getTelegramStickerPack(packName, botToken) {
     const response = await axios.get(`https://api.telegram.org/bot${botToken}/getStickerSet?name=${packName}`);
     if (!response.data.ok) throw new Error(response.data.description);
     const stickerSet = response.data.result;
+    let staticCount = 0, videoCount = 0, tgsCount = 0;
+    stickerSet.stickers.forEach(st => {
+        if (st.is_video) videoCount++;
+        else if (st.is_animated) tgsCount++;
+        else staticCount++;
+    });
     return {
         title: stickerSet.title,
         name: stickerSet.name,
-        stickers: stickerSet.stickers
+        stickers: stickerSet.stickers,
+        staticCount,
+        videoCount,
+        tgsCount,
+        totalCount: stickerSet.stickers.length
     };
 }
 
@@ -93,10 +104,16 @@ module.exports = {
         const telegramUrl = args[1];
         const { from, sender } = msg;
 
+        // Handle tombol pilihan
+        if (msg.isGroup && msg.body && msg.body.startsWith('telegram_sticker_')) {
+            const option = msg.body.replace('telegram_sticker_', '');
+            return module.exports.downloadStickers(bot, msg, option);
+        }
+
+        // Handle download pack dari Telegram
         if (action === '-get' && telegramUrl) {
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
             if (!botToken) return msg.reply("❌ Telegram Bot Token tidak ditemukan.");
-
             const packName = extractStickerPackName(telegramUrl);
             if (!packName) return msg.reply("❌ URL tidak valid.");
 
@@ -104,12 +121,23 @@ module.exports = {
 
             try {
                 const packInfo = await getTelegramStickerPack(packName, botToken);
+
                 global.telegramStickerSessions[sender] = { packInfo, botToken, timestamp: Date.now() };
 
+                const buttons = [
+                    { buttonId: `telegram_sticker_all`, buttonText: { displayText: `📦 Semua (${packInfo.totalCount})` }, type: 1 },
+                    { buttonId: `telegram_sticker_half`, buttonText: { displayText: `📦 ${Math.ceil(packInfo.totalCount/2)} Sticker` }, type: 1 },
+                    { buttonId: `telegram_sticker_quarter`, buttonText: { displayText: `📦 ${Math.ceil(packInfo.totalCount/4)} Sticker` }, type: 1 }
+                ];
+                if (packInfo.videoCount > 0) buttons.push({ buttonId: `telegram_sticker_video`, buttonText: { displayText: `🎬 Video WebM (${packInfo.videoCount})` }, type: 1 });
+                if (packInfo.tgsCount > 0) buttons.push({ buttonId: `telegram_sticker_tgs`, buttonText: { displayText: `🎭 TGS Animasi (${packInfo.tgsCount})` }, type: 1 });
+                if (packInfo.staticCount > 0) buttons.push({ buttonId: `telegram_sticker_static`, buttonText: { displayText: `🖼️ Statis (${packInfo.staticCount})` }, type: 1 });
+
                 await bot.sendMessage(from, {
-                    text: `📦 *Sticker Pack:* ${packInfo.title}\n` +
-                          `🎯 *Total:* ${packInfo.stickers.length}\n\n` +
-                          `Ketik: telegram_sticker_all untuk download semua`
+                    caption: `📦 *Sticker Pack Ditemukan!*\n\n🎯 *Nama:* ${packInfo.title}\n🔗 *Pack ID:* ${packInfo.name}\n\n📊 *Detail:*\n🖼️ Statis: ${packInfo.staticCount}\n🎬 Video: ${packInfo.videoCount}\n🎭 TGS: ${packInfo.tgsCount}\n📈 Total: ${packInfo.totalCount}\n\n❓ Pilih opsi download:`,
+                    footer: "Telegram Sticker Downloader",
+                    buttons,
+                    headerType: 4
                 }, { quoted: msg });
 
                 await msg.react("✅");
@@ -122,6 +150,7 @@ module.exports = {
             return;
         }
 
+        // Konversi media biasa
         const targetMsg = msg.quoted || msg;
         const validTypes = ['imageMessage', 'videoMessage', 'documentMessage'];
         if (!validTypes.includes(targetMsg.type)) {
@@ -178,10 +207,16 @@ module.exports = {
         if (!sessionData) return msg.reply("❌ Session expired.");
 
         const { packInfo, botToken } = sessionData;
-        let stickersToDownload = packInfo.stickers;
-
-        if (option === 'half') stickersToDownload = stickersToDownload.slice(0, Math.ceil(stickersToDownload.length / 2));
-        if (option === 'quarter') stickersToDownload = stickersToDownload.slice(0, Math.ceil(stickersToDownload.length / 4));
+        let stickersToDownload = [];
+        switch (option) {
+            case 'all': stickersToDownload = packInfo.stickers; break;
+            case 'half': stickersToDownload = packInfo.stickers.slice(0, Math.ceil(packInfo.totalCount/2)); break;
+            case 'quarter': stickersToDownload = packInfo.stickers.slice(0, Math.ceil(packInfo.totalCount/4)); break;
+            case 'video': stickersToDownload = packInfo.stickers.filter(s => s.is_video); break;
+            case 'tgs': stickersToDownload = packInfo.stickers.filter(s => s.is_animated && !s.is_video); break;
+            case 'static': stickersToDownload = packInfo.stickers.filter(s => !s.is_animated && !s.is_video); break;
+            default: return msg.reply("❌ Opsi tidak valid.");
+        }
 
         for (let i = 0; i < stickersToDownload.length; i++) {
             const sticker = stickersToDownload[i];
@@ -190,7 +225,7 @@ module.exports = {
                 await convertAndSendSticker(bot, msg.from, fileData, `${packInfo.title} - ${i+1}`, msg);
                 await new Promise(r => setTimeout(r, sticker.is_video || fileData.format === 'tgs' ? 5000 : 2000));
             } catch (err) {
-                console.error(`Error on sticker ${i+1}:`, err.message);
+                console.error(`Error sticker ${i+1}:`, err.message);
             }
         }
 
