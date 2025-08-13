@@ -5,12 +5,9 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const sharp = require("sharp");
 
-const httpsAgent = new https.Agent({
-    keepAlive: true,
-    keepAliveMsecs: 60000
-});
-
+const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 60000 });
 const TEMP_DIR = path.join(__dirname, '../../temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
@@ -26,13 +23,12 @@ async function downloadTelegramFile(sticker, botToken) {
     const fileInfoResponse = await axios.get(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`, { httpsAgent });
     if (!fileInfoResponse.data.ok) throw new Error(fileInfoResponse.data.description);
 
-    const fileInfo = fileInfoResponse.data.result;
-    const filePath = fileInfo.file_path;
+    const filePath = fileInfoResponse.data.result.file_path;
     const format = filePath.endsWith('.tgs') ? 'tgs'
-                 : filePath.endsWith('.webm') ? 'webm'
-                 : filePath.endsWith('.webp') ? 'webp'
-                 : filePath.endsWith('.mp4') ? 'mp4'
-                 : 'unknown';
+        : filePath.endsWith('.webm') ? 'webm'
+        : filePath.endsWith('.webp') ? 'webp'
+        : filePath.endsWith('.mp4') ? 'mp4'
+        : 'unknown';
 
     const downloadResponse = await axios.get(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {
         responseType: 'arraybuffer',
@@ -51,12 +47,14 @@ async function getTelegramStickerPack(packName, botToken) {
     const response = await axios.get(`https://api.telegram.org/bot${botToken}/getStickerSet?name=${packName}`);
     if (!response.data.ok) throw new Error(response.data.description);
     const stickerSet = response.data.result;
+
     let staticCount = 0, videoCount = 0, tgsCount = 0;
     stickerSet.stickers.forEach(st => {
         if (st.is_video) videoCount++;
         else if (st.is_animated) tgsCount++;
         else staticCount++;
     });
+
     return {
         title: stickerSet.title,
         name: stickerSet.name,
@@ -67,6 +65,48 @@ async function getTelegramStickerPack(packName, botToken) {
         tgsCount,
         totalCount: stickerSet.stickers.length
     };
+}
+
+async function generateThumbnail(packInfo, botToken) {
+    let thumbBuffer = null;
+
+    // 1. Gunakan thumbnail resmi
+    if (packInfo.thumb && packInfo.thumb.file_id) {
+        const thumbData = await downloadTelegramFile(packInfo.thumb, botToken);
+        return thumbData.buffer;
+    }
+
+    // 2. Cari stiker statis
+    const staticSticker = packInfo.stickers.find(s => !s.is_animated && !s.is_video);
+    if (staticSticker) {
+        const staticData = await downloadTelegramFile(staticSticker, botToken);
+        return staticData.buffer;
+    }
+
+    // 3. Kalau tidak ada statis, ambil animasi pertama dan konversi ke gambar
+    const animSticker = packInfo.stickers.find(s => s.is_animated || s.is_video);
+    if (animSticker) {
+        const animData = await downloadTelegramFile(animSticker, botToken);
+        if (animData.format === 'tgs') {
+            // render frame pertama TGS
+            const sticker = await createStickerFromTGS(animData.buffer, {
+                pack: "thumb",
+                author: "thumb",
+                type: StickerTypes.FULL,
+                quality: 50
+            });
+            return sticker.toBuffer();
+        } else if (animData.isWebm || animData.format === 'mp4') {
+            const sticker = await createStickerFromVideo(animData.buffer, {
+                pack: "thumb",
+                author: "thumb",
+                type: StickerTypes.FULL,
+                quality: 50
+            });
+            return sticker.toBuffer();
+        }
+    }
+    return thumbBuffer;
 }
 
 async function convertAndSendSticker(bot, chatId, fileData, stickerTitle, quotedMsg) {
@@ -84,7 +124,7 @@ async function convertAndSendSticker(bot, chatId, fileData, stickerTitle, quoted
     let sticker;
     if (format === 'tgs') {
         sticker = await createStickerFromTGS(buffer, stickerOptions);
-    } else if (isWebm) {
+    } else if (isWebm || format === 'mp4') {
         sticker = await createStickerFromVideo(buffer, stickerOptions);
     } else {
         sticker = new Sticker(buffer, { ...stickerOptions, background: 'transparent' });
@@ -103,13 +143,11 @@ module.exports = {
         const telegramUrl = args[1];
         const { from, sender } = msg;
 
-        // Handle tombol pilihan
         if (msg.isGroup && msg.body && msg.body.startsWith('telegram_sticker_')) {
             const option = msg.body.replace('telegram_sticker_', '');
             return module.exports.downloadStickers(bot, msg, option);
         }
 
-        // Handle download pack dari Telegram
         if (action === '-get' && telegramUrl) {
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
             if (!botToken) return msg.reply("❌ Telegram Bot Token tidak ditemukan.");
@@ -120,21 +158,9 @@ module.exports = {
 
             try {
                 const packInfo = await getTelegramStickerPack(packName, botToken);
-
                 global.telegramStickerSessions[sender] = { packInfo, botToken, timestamp: Date.now() };
 
-                // ambil thumbnail
-                let thumbBuffer;
-                if (packInfo.thumb && packInfo.thumb.file_id) {
-                    const thumbData = await downloadTelegramFile(packInfo.thumb, botToken);
-                    thumbBuffer = thumbData.buffer;
-                } else {
-                    const staticSticker = packInfo.stickers.find(s => !s.is_animated && !s.is_video);
-                    if (staticSticker) {
-                        const staticData = await downloadTelegramFile(staticSticker, botToken);
-                        thumbBuffer = staticData.buffer;
-                    }
-                }
+                const thumbBuffer = await generateThumbnail(packInfo, botToken);
 
                 const buttons = [
                     { buttonId: `telegram_sticker_all`, buttonText: { displayText: `📦 Semua (${packInfo.totalCount})` }, type: 1 },
@@ -163,7 +189,6 @@ module.exports = {
             return;
         }
 
-        // Konversi media biasa
         const targetMsg = msg.quoted || msg;
         const validTypes = ['imageMessage', 'videoMessage', 'documentMessage'];
         if (!validTypes.includes(targetMsg.type)) {
@@ -173,7 +198,7 @@ module.exports = {
         let isVideo = targetMsg.type === 'videoMessage';
         if (targetMsg.type === 'documentMessage') {
             const mimetype = targetMsg.msg?.mimetype || '';
-            if (mimetype.includes('webm') || mimetype.includes('tgs')) {
+            if (mimetype.includes('webm') || mimetype.includes('tgs') || mimetype.includes('mp4')) {
                 isVideo = true;
             } else if (!mimetype.startsWith('image')) {
                 return msg.reply("❌ Dokumen bukan gambar atau video.");
@@ -200,7 +225,9 @@ module.exports = {
             };
 
             let sticker;
-            if (isVideo) {
+            if (targetMsg.msg?.mimetype?.includes('tgs')) {
+                sticker = await createStickerFromTGS(buffer, stickerOptions);
+            } else if (isVideo) {
                 sticker = await createStickerFromVideo(buffer, stickerOptions);
             } else {
                 sticker = new Sticker(buffer, { ...stickerOptions, background: 'transparent' });
