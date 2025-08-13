@@ -4,14 +4,14 @@ const { createSticker, detectMediaType } = require("../../lib/sticker.js");
 module.exports = {
   name: "sticker",
   alias: ["s"],
-  description: "Ubah gambar/video/dokumen menjadi stiker. Mendukung format: JPG, PNG, GIF, WebP, MP4, WebM, MOV, AVI, MKV",
+  description: "Ubah gambar/video/dokumen menjadi stiker. Mendukung format: JPG, PNG, GIF, WebP, MP4, WebM, MOV, AVI, MKV, TGS",
   execute: async (msg, { bot }) => {
     
     let targetMsg = msg.quoted || msg;
     
     const validTypes = ['imageMessage', 'videoMessage', 'documentMessage'];
     if (!validTypes.includes(targetMsg.type)) {
-        return msg.reply("❌ Kirim atau reply media yang valid dengan caption `.s`.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV\n• Durasi video maksimal: 10 detik");
+        return msg.reply("❌ Kirim atau reply media yang valid dengan caption `.s`.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV\n• Stiker: TGS (Telegram Sticker)\n• Durasi video maksimal: 10 detik");
     }
 
     // Validasi untuk tipe dokumen
@@ -23,16 +23,17 @@ module.exports = {
         
         const supportedMimes = [
             'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-            'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska'
+            'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska',
+            'application/json', 'application/x-tgsticker'
         ];
         
-        const supportedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm', '.mov', '.avi', '.mkv'];
+        const supportedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm', '.mov', '.avi', '.mkv', '.tgs'];
         
         const hasValidMime = supportedMimes.some(mime => mimetype.includes(mime));
         const hasValidExt = supportedExts.some(ext => fileName.toLowerCase().includes(ext));
         
         if (!hasValidMime && !hasValidExt) {
-            return msg.reply("❌ Dokumen yang dikirim bukan media yang didukung.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV");
+            return msg.reply("❌ Dokumen yang dikirim bukan media yang didukung.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV\n• Stiker: TGS (Telegram Sticker)");
         }
     }
 
@@ -89,8 +90,16 @@ module.exports = {
         await msg.react("⚠️");
         
         // Error handling yang lebih spesifik
-        if (err.message.includes('ffmpeg') || err.message.includes('FFmpeg')) {
-            return msg.reply("❌ Gagal membuat stiker. FFmpeg tidak tersedia di server.\n\n🔧 Kontak admin untuk menginstal FFmpeg.");
+        if (err.message.includes('Puppeteer not installed')) {
+            return msg.reply("❌ TGS sticker memerlukan Puppeteer untuk diproses.\n\n🔧 Install dengan: `npm install puppeteer`\n💡 Atau kirim file TGS sebagai gambar/video biasa.");
+        }
+        
+        if (err.message.includes('Image conversion failed') && err.message.includes('both failed')) {
+            return msg.reply("❌ File yang dikirim corrupt atau tidak dapat diproses.\n\n💡 Tips:\n• Pastikan file tidak rusak\n• Coba kirim ulang file tersebut\n• Gunakan format file yang lebih umum (JPG/PNG untuk gambar, MP4 untuk video)");
+        }
+        
+        if (err.message.includes('FFmpeg conversion failed') || err.message.includes('Error while decoding')) {
+            return msg.reply("❌ Gagal memproses file dengan FFmpeg.\n\n💡 File mungkin corrupt atau format tidak didukung.\n🔄 Coba convert file ke format standar (JPG/PNG/MP4) terlebih dahulu.");
         }
         
         if (err.message.includes('No video stream found')) {
@@ -114,7 +123,7 @@ module.exports = {
         }
         
         // Generic error
-        return msg.reply("❌ Gagal membuat stiker. Pastikan media yang dikirim valid.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV (maks 10 detik)\n\n💡 Tips:\n• Pastikan file tidak corrupt\n• Ukuran file maksimal 10MB\n• Untuk video, durasi maksimal 10 detik");
+        return msg.reply("❌ Gagal membuat stiker. Pastikan media yang dikirim valid.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV (maks 10 detik)\n• Stiker: TGS (Telegram Sticker)\n\n💡 Tips:\n• Pastikan file tidak corrupt\n• Ukuran file maksimal 10MB\n• Untuk video, durasi maksimal 10 detik\n• Untuk TGS, pastikan Puppeteer terinstal");
     }
   },
 };
