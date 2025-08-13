@@ -61,6 +61,7 @@ async function getTelegramStickerPack(packName, botToken) {
         title: stickerSet.title,
         name: stickerSet.name,
         stickers: stickerSet.stickers,
+        thumb: stickerSet.thumb || null,
         staticCount,
         videoCount,
         tgsCount,
@@ -82,10 +83,8 @@ async function convertAndSendSticker(bot, chatId, fileData, stickerTitle, quoted
 
     let sticker;
     if (format === 'tgs') {
-        console.log(`Converting TGS: ${stickerTitle}`);
         sticker = await createStickerFromTGS(buffer, stickerOptions);
     } else if (isWebm) {
-        console.log(`Converting WebM: ${stickerTitle}`);
         sticker = await createStickerFromVideo(buffer, stickerOptions);
     } else {
         sticker = new Sticker(buffer, { ...stickerOptions, background: 'transparent' });
@@ -124,16 +123,7 @@ module.exports = {
 
                 global.telegramStickerSessions[sender] = { packInfo, botToken, timestamp: Date.now() };
 
-                const buttons = [
-                    { buttonId: `telegram_sticker_all`, buttonText: { displayText: `📦 Semua (${packInfo.totalCount})` }, type: 1 },
-                    { buttonId: `telegram_sticker_half`, buttonText: { displayText: `📦 ${Math.ceil(packInfo.totalCount/2)} Sticker` }, type: 1 },
-                    { buttonId: `telegram_sticker_quarter`, buttonText: { displayText: `📦 ${Math.ceil(packInfo.totalCount/4)} Sticker` }, type: 1 }
-                ];
-                if (packInfo.videoCount > 0) buttons.push({ buttonId: `telegram_sticker_video`, buttonText: { displayText: `🎬 Video WebM (${packInfo.videoCount})` }, type: 1 });
-                if (packInfo.tgsCount > 0) buttons.push({ buttonId: `telegram_sticker_tgs`, buttonText: { displayText: `🎭 TGS Animasi (${packInfo.tgsCount})` }, type: 1 });
-                if (packInfo.staticCount > 0) buttons.push({ buttonId: `telegram_sticker_static`, buttonText: { displayText: `🖼️ Statis (${packInfo.staticCount})` }, type: 1 });
-
-                // ambil thumbnail dari sticker pack atau salah satu stiker statis
+                // ambil thumbnail
                 let thumbBuffer;
                 if (packInfo.thumb && packInfo.thumb.file_id) {
                     const thumbData = await downloadTelegramFile(packInfo.thumb, botToken);
@@ -146,9 +136,18 @@ module.exports = {
                     }
                 }
 
+                const buttons = [
+                    { buttonId: `telegram_sticker_all`, buttonText: { displayText: `📦 Semua (${packInfo.totalCount})` }, type: 1 },
+                    { buttonId: `telegram_sticker_half`, buttonText: { displayText: `📦 ${Math.ceil(packInfo.totalCount/2)} Sticker` }, type: 1 },
+                    { buttonId: `telegram_sticker_quarter`, buttonText: { displayText: `📦 ${Math.ceil(packInfo.totalCount/4)} Sticker` }, type: 1 }
+                ];
+                if (packInfo.videoCount > 0) buttons.push({ buttonId: `telegram_sticker_video`, buttonText: { displayText: `🎬 Video WebM (${packInfo.videoCount})` }, type: 1 });
+                if (packInfo.tgsCount > 0) buttons.push({ buttonId: `telegram_sticker_tgs`, buttonText: { displayText: `🎭 TGS Animasi (${packInfo.tgsCount})` }, type: 1 });
+                if (packInfo.staticCount > 0) buttons.push({ buttonId: `telegram_sticker_static`, buttonText: { displayText: `🖼️ Statis (${packInfo.staticCount})` }, type: 1 });
+
                 await bot.sendMessage(from, {
                     image: thumbBuffer,
-                    caption: `📦 *Sticker Pack Ditemukan!* ...`,
+                    caption: `📦 *Sticker Pack Ditemukan!*\n\n🎯 *Nama:* ${packInfo.title}\n🔗 *Pack ID:* ${packInfo.name}\n\n📊 *Detail:*\n🖼️ Statis: ${packInfo.staticCount}\n🎬 Video: ${packInfo.videoCount}\n🎭 TGS: ${packInfo.tgsCount}\n📈 Total: ${packInfo.totalCount}\n\n❓ Pilih opsi download:`,
                     footer: "Telegram Sticker Downloader",
                     buttons,
                     headerType: 4
