@@ -1,5 +1,5 @@
 const { Sticker, StickerTypes } = require("wa-sticker-formatter");
-const { downloadMediaMessage } = require("@whiskeysockets/baileys");
+const { downloadMediaMessage } = require("lily-baileys");
 const { createStickerFromVideo } = require("../../lib/sticker.js");
 
 module.exports = {
