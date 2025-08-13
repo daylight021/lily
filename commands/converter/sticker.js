@@ -1,33 +1,51 @@
-const { Sticker, StickerTypes } = require("wa-sticker-formatter");
 const { downloadMediaMessage } = require("lily-baileys");
-const { createStickerFromVideo } = require("../../lib/sticker.js");
+const { createSticker, detectMediaType } = require("../../lib/sticker.js");
 
 module.exports = {
   name: "sticker",
   alias: ["s"],
-  description: "Ubah gambar/video/dokumen menjadi stiker.",
+  description: "Ubah gambar/video/dokumen menjadi stiker. Mendukung format: JPG, PNG, GIF, WebP, MP4, WebM, MOV, AVI, MKV",
   execute: async (msg, { bot }) => {
     
     let targetMsg = msg.quoted || msg;
     
     const validTypes = ['imageMessage', 'videoMessage', 'documentMessage'];
     if (!validTypes.includes(targetMsg.type)) {
-        return msg.reply("❌ Kirim atau reply media yang valid dengan caption `.s`.");
+        return msg.reply("❌ Kirim atau reply media yang valid dengan caption `.s`.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV\n• Durasi video maksimal: 10 detik");
     }
 
-    let isVideo = targetMsg.type === 'videoMessage';
+    // Validasi untuk tipe dokumen
     if (targetMsg.type === 'documentMessage') {
         const mimetype = targetMsg.msg?.mimetype || '';
-        if (mimetype.startsWith('video')) {
-            isVideo = true;
-        } else if (!mimetype.startsWith('image')) {
-            return msg.reply("❌ Dokumen yang dikirim bukan gambar atau video.");
+        const fileName = targetMsg.msg?.fileName || '';
+        
+        console.log(`Document mimetype: ${mimetype}, fileName: ${fileName}`);
+        
+        const supportedMimes = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+            'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska'
+        ];
+        
+        const supportedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm', '.mov', '.avi', '.mkv'];
+        
+        const hasValidMime = supportedMimes.some(mime => mimetype.includes(mime));
+        const hasValidExt = supportedExts.some(ext => fileName.toLowerCase().includes(ext));
+        
+        if (!hasValidMime && !hasValidExt) {
+            return msg.reply("❌ Dokumen yang dikirim bukan media yang didukung.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV");
         }
     }
 
     await msg.react("⏳");
+    
     try {
+        console.log("Starting sticker creation process...");
+        console.log(`Message type: ${targetMsg.type}`);
+        
+        // Download media
         const messageToDownload = targetMsg.isViewOnce ? targetMsg.raw : targetMsg;
+        console.log("Downloading media message...");
+        
         const buffer = await downloadMediaMessage(
             messageToDownload,
             "buffer",
@@ -35,37 +53,68 @@ module.exports = {
             { reuploadRequest: bot.updateMediaMessage }
         );
 
-        let sticker;
+        console.log(`Downloaded buffer size: ${buffer.length} bytes`);
+        
+        // Siapkan opsi stiker
         const stickerOptions = {
             pack: process.env.stickerPackname || "Bot Stiker",
             author: process.env.stickerAuthor || "Dibuat oleh Bot",
-            type: StickerTypes.FULL,
-            quality: 90,
+            mimetype: targetMsg.msg?.mimetype || ''
         };
 
-        // --- GUNAKAN FUNGSI BERBEDA UNTUK VIDEO ---
-        if (isVideo) {
-            console.log("Membuat stiker dari video menggunakan logika kustom...");
-            sticker = await createStickerFromVideo(buffer, stickerOptions);
-        } else {
-            console.log("Membuat stiker dari gambar menggunakan logika standar...");
-            sticker = new Sticker(buffer, stickerOptions);
+        // Deteksi tipe media
+        const mediaType = detectMediaType(buffer, stickerOptions.mimetype);
+        console.log(`Detected media type: ${mediaType}`);
+
+        // Validasi ukuran file
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (buffer.length > maxSize) {
+            await msg.react("⚠️");
+            return msg.reply("❌ Ukuran file terlalu besar! Maksimal 10MB.\n\n💡 Tips: Kompres video atau gunakan durasi yang lebih pendek.");
         }
 
+        // Buat stiker menggunakan auto-detection
+        console.log("Creating sticker with auto-detection...");
+        const sticker = await createSticker(buffer, stickerOptions);
+        
+        // Kirim stiker
+        console.log("Sending sticker...");
         await bot.sendMessage(msg.from, await sticker.toMessage(), { quoted: msg });
         await msg.react("✅");
+        
+        console.log("Sticker sent successfully!");
 
     } catch (err) {
-      console.error("Kesalahan saat konversi stiker:", err);
-      await msg.react("⚠️");
-      // Memberikan pesan error yang lebih spesifik jika ffmpeg tidak ada
-      if (err.message.includes('ffmpeg')) {
-          return msg.reply("❌ Gagal membuat stiker video. Pastikan FFmpeg sudah terinstal di server.");
-      }
-      if (err.message.includes('too large')) {
-          return msg.reply("❌ Gagal membuat stiker. Ukuran media terlalu besar.");
-      }
-      return msg.reply("❌ Gagal membuat stiker. Pastikan media valid.");
+        console.error("Kesalahan saat konversi stiker:", err);
+        await msg.react("⚠️");
+        
+        // Error handling yang lebih spesifik
+        if (err.message.includes('ffmpeg') || err.message.includes('FFmpeg')) {
+            return msg.reply("❌ Gagal membuat stiker. FFmpeg tidak tersedia di server.\n\n🔧 Kontak admin untuk menginstal FFmpeg.");
+        }
+        
+        if (err.message.includes('No video stream found')) {
+            return msg.reply("❌ File yang dikirim tidak memiliki stream video yang valid.\n\n💡 Pastikan file video tidak corrupt.");
+        }
+        
+        if (err.message.includes('size limits')) {
+            return msg.reply("❌ Gagal membuat stiker dalam batas ukuran yang diizinkan.\n\n💡 Tips:\n• Gunakan video yang lebih pendek (maks 10 detik)\n• Kompres video terlebih dahulu\n• Gunakan resolusi yang lebih kecil");
+        }
+        
+        if (err.message.includes('Invalid duration')) {
+            return msg.reply("❌ Durasi video tidak valid atau file corrupt.\n\n💡 Tips:\n• Pastikan file video tidak rusak\n• Coba convert ulang video Anda\n• Gunakan format video standar (MP4)");
+        }
+        
+        if (err.message.includes('too large') || buffer.length > 10 * 1024 * 1024) {
+            return msg.reply("❌ Ukuran media terlalu besar (maks 10MB).\n\n💡 Tips untuk mengurangi ukuran:\n• Kompres video/gambar\n• Potong durasi video\n• Turunkan kualitas/resolusi");
+        }
+        
+        if (err.message.includes('ENOENT') || err.message.includes('spawn')) {
+            return msg.reply("❌ Error sistem dalam memproses media.\n\n🔧 Coba lagi dalam beberapa saat atau kontak admin.");
+        }
+        
+        // Generic error
+        return msg.reply("❌ Gagal membuat stiker. Pastikan media yang dikirim valid.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV (maks 10 detik)\n\n💡 Tips:\n• Pastikan file tidak corrupt\n• Ukuran file maksimal 10MB\n• Untuk video, durasi maksimal 10 detik");
     }
   },
 };
