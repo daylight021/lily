@@ -133,8 +133,22 @@ module.exports = {
                 if (packInfo.tgsCount > 0) buttons.push({ buttonId: `telegram_sticker_tgs`, buttonText: { displayText: `🎭 TGS Animasi (${packInfo.tgsCount})` }, type: 1 });
                 if (packInfo.staticCount > 0) buttons.push({ buttonId: `telegram_sticker_static`, buttonText: { displayText: `🖼️ Statis (${packInfo.staticCount})` }, type: 1 });
 
+                // ambil thumbnail dari sticker pack atau salah satu stiker statis
+                let thumbBuffer;
+                if (packInfo.thumb && packInfo.thumb.file_id) {
+                    const thumbData = await downloadTelegramFile(packInfo.thumb, botToken);
+                    thumbBuffer = thumbData.buffer;
+                } else {
+                    const staticSticker = packInfo.stickers.find(s => !s.is_animated && !s.is_video);
+                    if (staticSticker) {
+                        const staticData = await downloadTelegramFile(staticSticker, botToken);
+                        thumbBuffer = staticData.buffer;
+                    }
+                }
+
                 await bot.sendMessage(from, {
-                    caption: `📦 *Sticker Pack Ditemukan!*\n\n🎯 *Nama:* ${packInfo.title}\n🔗 *Pack ID:* ${packInfo.name}\n\n📊 *Detail:*\n🖼️ Statis: ${packInfo.staticCount}\n🎬 Video: ${packInfo.videoCount}\n🎭 TGS: ${packInfo.tgsCount}\n📈 Total: ${packInfo.totalCount}\n\n❓ Pilih opsi download:`,
+                    image: thumbBuffer,
+                    caption: `📦 *Sticker Pack Ditemukan!* ...`,
                     footer: "Telegram Sticker Downloader",
                     buttons,
                     headerType: 4
