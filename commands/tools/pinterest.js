@@ -29,27 +29,6 @@ function shuffleArray(array) {
     return array;
 }
 
-// Fungsi untuk mendapatkan URL resolusi tinggi
-function getHighResUrl(url) {
-  return url
-    .replace(/\/\d+x\d*\//, '/originals/')
-    .replace(/236x/g, '736x')
-    .replace(/474x/g, '736x');
-}
-
-// Fungsi untuk menambahkan randomness pada pencarian
-function addRandomness(keyword) {
-  const randomSuffixes = ['', ' aesthetic', ' beautiful', ' art', ' design', ' style'];
-  const randomPrefix = ['', 'best ', 'cool ', 'amazing '];
-  
-  // Gunakan timestamp sebagai seed untuk konsistensi per request
-  const seed = Date.now();
-  const suffixIndex = seed % randomSuffixes.length;
-  const prefixIndex = Math.floor(seed / 1000) % randomPrefix.length;
-  
-  return randomPrefix[prefixIndex] + keyword + randomSuffixes[suffixIndex];
-}
-
 // --- FUNGSI UTAMA SCRAPING ---
 
 async function getPinterestImages(keyword) {
@@ -78,7 +57,7 @@ async function getPinterestImages(keyword) {
     const page = await browser.newPage();
     
     // Viewport kecil untuk kecepatan
-    await page.setViewport({ width: 1024, height: 768 });
+    await page.setViewport({ width: 640, height: 360 });
     
     // Tambahkan randomness pada keyword untuk hasil berbeda
     // const randomizedKeyword = addRandomness(keyword);
