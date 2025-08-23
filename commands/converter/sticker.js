@@ -1,5 +1,5 @@
 const { downloadMediaMessage } = require("lily-baileys");
-const { createSticker, detectMediaType } = require("../../lib/sticker.js");
+const { createSticker } = require("../../lib/sticker.js");
 
 module.exports = {
   name: "sticker",
@@ -60,7 +60,6 @@ module.exports = {
             mimetype: targetMsg.msg?.mimetype || ''
         };
 
-        // Memanggil fungsi helper tunggal untuk memproses stiker
         console.log("Processing media and creating sticker...");
         const sticker = await createSticker(buffer, stickerOptions);
         
