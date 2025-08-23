@@ -1,11 +1,5 @@
 const { downloadMediaMessage } = require("lily-baileys");
-const { createSticker, createStickerFromVideo, createStickerFromImage } = require("../../lib/sticker.js");
-
-// Fungsi untuk memeriksa apakah file WebP adalah animasi
-function isAnimatedWebP(buffer) {
-  // Cek apakah buffer memiliki string "ANIM"
-  return buffer.includes(Buffer.from('ANIM', 'ascii'));
-}
+const { createSticker, createStickerFromVideo, createStickerFromImage, detectMediaType } = require("../../lib/sticker.js");
 
 module.exports = {
   name: "sticker",
@@ -20,7 +14,6 @@ module.exports = {
         return msg.reply("❌ Kirim atau reply media yang valid dengan caption `.s`.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV\n• Stiker: TGS (Telegram Sticker)\n• Durasi video maksimal: 10 detik");
     }
 
-    // Validasi untuk tipe dokumen
     if (targetMsg.type === 'documentMessage') {
         const mimetype = targetMsg.msg?.mimetype || '';
         const fileName = targetMsg.msg?.fileName || '';
@@ -67,25 +60,28 @@ module.exports = {
             mimetype: targetMsg.msg?.mimetype || ''
         };
 
-        // --- Logika baru: Deteksi dan Proses Media Animasi ---
-        const isVideo = targetMsg.type === 'videoMessage' || stickerOptions.mimetype.startsWith('video/');
-        const isGif = stickerOptions.mimetype.includes('gif');
-        const isAnimatedWebp = stickerOptions.mimetype.includes('webp') && isAnimatedWebP(buffer);
-
         let sticker;
 
-        // Gunakan createStickerFromVideo untuk semua media animasi
-        if (isVideo || isGif || isAnimatedWebp) {
-            console.log("Detected animated media (video/gif/animated webp), processing with createStickerFromVideo...");
+        // Gunakan fungsi detectMediaType dari file helper
+        const mediaType = detectMediaType(buffer, stickerOptions.mimetype);
+        console.log(`Detected media type: ${mediaType}`);
+
+        // Definisikan media animasi secara eksplisit
+        const animatedTypes = ['gif', 'mp4', 'webm', 'mov', 'avi', 'mkv', 'tgs'];
+        
+        // Cek apakah media yang dikirimkan termasuk jenis video atau animasi
+        const isAnimated = animatedTypes.includes(mediaType) || (mediaType === 'webp' && (targetMsg.type === 'videoMessage' || stickerOptions.mimetype.includes('video/')));
+        
+        if (isAnimated) {
+            console.log("Processing as animated media (video/gif/tgs/animated webp)...");
             sticker = await createStickerFromVideo(buffer, stickerOptions);
         } else {
-            // Gunakan createStickerFromImage untuk gambar statis
-            console.log("Detected static media (image/document), processing with createStickerFromImage...");
+            // Semua jenis media lain dianggap statis
+            console.log("Processing as static image...");
             sticker = await createStickerFromImage(buffer, stickerOptions);
         }
         
-        // --- Akhir Logika Baru ---
-
+        
         console.log("Sending sticker...");
         await bot.sendMessage(msg.from, await sticker.toMessage(), { quoted: msg });
         await msg.react("✅");
@@ -96,11 +92,15 @@ module.exports = {
         console.error("Kesalahan saat konversi stiker:", err);
         await msg.react("⚠️");
         
+        if (err.message.includes('Invalid data found when processing input') || err.message.includes('Error while decoding stream')) {
+            return msg.reply("❌ Gagal memproses file. Media yang Anda kirim rusak atau formatnya tidak didukung oleh FFmpeg.\n\n💡 Tips:\n• Pastikan file tidak rusak atau corrupt.\n• Coba convert file ke format standar (JPG/PNG/MP4) terlebih dahulu.");
+        }
+        
         if (err.message.includes('Puppeteer not installed')) {
             return msg.reply("❌ TGS sticker memerlukan Puppeteer untuk diproses.\n\n🔧 Install dengan: `npm install puppeteer`");
         }
         
-        if (err.message.includes('Image conversion failed') || err.message.includes('Error while decoding')) {
+        if (err.message.includes('Image conversion failed') || err.message.includes('Error while decoding stream')) {
             return msg.reply("❌ File yang dikirim corrupt atau tidak dapat diproses.\n\n💡 Tips:\n• Pastikan file tidak rusak\n• Coba kirim ulang file tersebut");
         }
         
@@ -112,7 +112,6 @@ module.exports = {
             return msg.reply("❌ Durasi video tidak valid atau file corrupt.\n\n💡 Pastikan file video tidak rusak.");
         }
         
-        // Error handling yang lebih umum untuk kasus lainnya
         return msg.reply("❌ Gagal membuat stiker. Pastikan media yang dikirim valid.\n\n📋 Format yang didukung:\n• Gambar: JPG, PNG, GIF, WebP\n• Video: MP4, WebM, MOV, AVI, MKV (maks 10 detik)\n• Stiker: TGS (Telegram Sticker)\n\n💡 Tips:\n• Ukuran file maksimal 10MB\n• Untuk video, durasi maksimal 10 detik\n• Untuk TGS, pastikan Puppeteer terinstal");
     }
   },
