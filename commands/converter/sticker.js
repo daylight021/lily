@@ -1,5 +1,5 @@
 const { downloadMediaMessage } = require("lily-baileys");
-const { createSticker, createStickerFromVideo, createStickerFromImage, detectMediaType } = require("../../lib/sticker.js");
+const { createSticker, detectMediaType } = require("../../lib/sticker.js");
 
 module.exports = {
   name: "sticker",
@@ -60,27 +60,9 @@ module.exports = {
             mimetype: targetMsg.msg?.mimetype || ''
         };
 
-        let sticker;
-
-        // Gunakan fungsi detectMediaType dari file helper
-        const mediaType = detectMediaType(buffer, stickerOptions.mimetype);
-        console.log(`Detected media type: ${mediaType}`);
-
-        // Definisikan media animasi secara eksplisit
-        const animatedTypes = ['gif', 'mp4', 'webm', 'mov', 'avi', 'mkv', 'tgs'];
-        
-        // Cek apakah media yang dikirimkan termasuk jenis video atau animasi
-        const isAnimated = animatedTypes.includes(mediaType) || (mediaType === 'webp' && (targetMsg.type === 'videoMessage' || stickerOptions.mimetype.includes('video/')));
-        
-        if (isAnimated) {
-            console.log("Processing as animated media (video/gif/tgs/animated webp)...");
-            sticker = await createStickerFromVideo(buffer, stickerOptions);
-        } else {
-            // Semua jenis media lain dianggap statis
-            console.log("Processing as static image...");
-            sticker = await createStickerFromImage(buffer, stickerOptions);
-        }
-        
+        // Memanggil fungsi helper tunggal untuk memproses stiker
+        console.log("Processing media and creating sticker...");
+        const sticker = await createSticker(buffer, stickerOptions);
         
         console.log("Sending sticker...");
         await bot.sendMessage(msg.from, await sticker.toMessage(), { quoted: msg });
