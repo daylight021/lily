@@ -1,5 +1,5 @@
 const { downloadMediaMessage } = require("lily-baileys");
-const { createSticker, createStickerFromVideo, createStickerFromImage, detectMediaType } = require("../../lib/sticker.js");
+const { createSticker, createStickerFromVideo, createStickerFromImage } = require("../../lib/sticker.js");
 
 // Fungsi untuk memeriksa apakah file WebP adalah animasi
 function isAnimatedWebP(buffer) {
@@ -49,7 +49,6 @@ module.exports = {
         console.log("Starting sticker creation process...");
         console.log(`Message type: ${targetMsg.type}`);
         
-        // Download media
         const messageToDownload = targetMsg.isViewOnce ? targetMsg.raw : targetMsg;
         console.log("Downloading media message...");
         
@@ -62,16 +61,11 @@ module.exports = {
 
         console.log(`Downloaded buffer size: ${buffer.length} bytes`);
         
-        // Siapkan opsi stiker
         const stickerOptions = {
             pack: process.env.stickerPackname || "Bot Stiker",
             author: process.env.stickerAuthor || "Dibuat oleh Bot",
             mimetype: targetMsg.msg?.mimetype || ''
         };
-
-        // Deteksi tipe media
-        const mediaType = detectMediaType(buffer, stickerOptions.mimetype);
-        console.log(`Detected media type: ${mediaType}`);
 
         // --- Logika baru: Deteksi dan Proses Media Animasi ---
         const isVideo = targetMsg.type === 'videoMessage' || stickerOptions.mimetype.startsWith('video/');
