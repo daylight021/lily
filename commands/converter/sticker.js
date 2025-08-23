@@ -1,5 +1,5 @@
 const { downloadMediaMessage } = require("lily-baileys");
-const { createSticker, createStickerFromVideo, createStickerFromImage } = require("../../lib/sticker.js");
+const { createSticker, createStickerFromVideo, createStickerFromImage, detectMediaType } = require("../../lib/sticker.js");
 
 // Fungsi untuk memeriksa apakah file WebP adalah animasi
 function isAnimatedWebP(buffer) {
