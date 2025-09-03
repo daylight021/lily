@@ -4,6 +4,8 @@ const path = require('path');
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const games = {}; // Menyimpan semua sesi game yang aktif
 
+const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/daylight021)";
+
 // --- KONFIGURASI DAN DATA GAME ---
 const Roles = { WEREWOLF: 'WEREWOLF', VILLAGER: 'VILLAGER', SEER: 'SEER', HUNTER: 'HUNTER', CUPID: 'CUPID' };
 const RoleInfo = {
@@ -106,6 +108,7 @@ async function progressGame(bot, groupId) {
         game.status = GameState.ENDED;
         let endMessage = `🎉 *PERMAINAN BERAKHIR!* 🎉\n\nTim *${winner}* telah memenangkan permainan!\n\n*Daftar Peran Terakhir:*\n` + getPlayerList(game.players, true);
         await bot.sendMessage(groupId, { text: endMessage });
+        await bot.sendMessage(groupId, { text: donationMessage });
         delete games[groupId];
         return;
     }
@@ -352,8 +355,12 @@ module.exports = {
             // Hentikan semua timer yang mungkin berjalan
             if (game.timeout) clearTimeout(game.timeout);
 
+
+
             // Hapus sesi game dari memori
             delete games[from];
+
+            await bot.sendMessage(from, { text: donationMessage });
 
             return msg.reply(`🛑 Permainan Werewolf telah dihentikan oleh host.`);
         }
