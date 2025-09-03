@@ -270,7 +270,11 @@ async function endGame(bot, groupId, reason = 'manual') {
               `Mulai lagi dengan *.family100 start*`,
         mentions: [...new Set(allMentions)]
     });
-    
+
+    const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/daylight021)";
+
+    await bot.sendMessage(from, { text: message + donationMessage });
+
     delete bot.game.family100[groupId];
 }
 
