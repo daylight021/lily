@@ -283,6 +283,7 @@ module.exports = {
     category: 'game',
     execute: async (msg, { bot, args, usedPrefix, participants }) => {
         const { from, sender, body } = msg;
+        const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/daylight021)";
         const senderName = msg.pushName || msg.senderName || sender.split('@')[0] || 'Pemain';
         bot.uno = bot.uno || {};
         const command = args[0]?.toLowerCase();
@@ -406,6 +407,8 @@ module.exports = {
                             console.error(`Failed to notify player ${player.id}:`, e);
                         }
                     }
+
+                    await bot.sendMessage(from, { text: groupMessage + donationMessage });
 
                     delete bot.uno[fromGroup];
                     return;
@@ -585,6 +588,9 @@ module.exports = {
 
                 delete bot.uno[from];
                 msg.reply('🛑 Sesi UNO telah dihentikan.');
+
+                await bot.sendMessage(from, { text: groupMessage + donationMessage });
+
                 break;
             }
 
@@ -603,5 +609,4 @@ module.exports = {
                 break;
         }
     }
-
 };
