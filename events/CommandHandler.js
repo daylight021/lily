@@ -117,6 +117,7 @@ async function handleFamily100Answer(msg, bot) {
 
     // Tampilkan jawaban
     statusText += `📋 *Jawaban* (${gameSession.correctAnswers}/${gameSession.totalAnswers}):\n`;
+    gameStatusText += `📋 *Jawaban* (${gameSession.correctAnswers}/${gameSession.totalAnswers}):\n`;
     gameSession.jawaban.forEach((jawaban, index) => {
       if (gameSession.terjawab[index]) {
         statusText += `✅ (${index + 1}) ${jawaban} - @${gameSession.answeredBy[index].split('@')[0]}\n`;
@@ -222,7 +223,7 @@ module.exports = {
               command: 'uno'
             };
 
-            return await unoCommand.execute.call(this, msg, extra);
+            await unoCommand.execute.call(this, msg, extra);
           } else {
             console.log(`[ERROR] uno command not found in commands collection`);
             return msg.reply("❌ Command uno tidak ditemukan.");
@@ -260,7 +261,14 @@ module.exports = {
                 command: 'ytmp4'
               };
 
-              return await ytmp4Command.execute.call(this, msg, extra);
+              await ytmp4Command.execute.call(this, msg, extra);
+              
+              // Kode Donasi Tambahan
+              const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/namaakun)";
+              setTimeout(async () => {
+                await this.sendMessage(msg.from, { text: donationMessage }, { quoted: msg });
+              }, 1000); // Delay 1 detik
+
             } else {
               console.log(`[ERROR] ytmp4 command not found in commands collection`);
               return msg.reply("❌ Command ytmp4 tidak ditemukan.");
@@ -303,7 +311,14 @@ module.exports = {
                 command: 'ytmp3'
               };
 
-              return await ytmp3Command.execute.call(this, msg, extra);
+              await ytmp3Command.execute.call(this, msg, extra);
+
+              // Kode Donasi Tambahan
+              const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/namaakun)";
+              setTimeout(async () => {
+                await this.sendMessage(msg.from, { text: donationMessage }, { quoted: msg });
+              }, 1000); // Delay 1 detik
+
             } else {
               console.log(`[ERROR] ytmp3 command not found in commands collection`);
               return msg.reply("❌ Command ytmp3 tidak ditemukan.");
@@ -344,7 +359,7 @@ module.exports = {
               
               if (msg.text.startsWith("📦 Semua ")) {
                 downloadOption = 'all';
-              } else if (msg.text.match(/^📦 \d+ Sticker$/)) {
+              } else if (msg.text.match(/^📦 (\d+) Sticker$/)) {
                 // Cek apakah ini half atau quarter berdasarkan jumlah
                 const sessionData = global.telegramStickerSessions[msg.sender];
                 if (sessionData && sessionData.packInfo) {
@@ -369,8 +384,14 @@ module.exports = {
                 downloadOption = 'all'; // Backward compatibility
               }
 
-              // Execute downloadStickers function dengan opsi yang sesuai
-              return await stickerCommand.downloadStickers(this, msg, downloadOption);
+              await stickerCommand.downloadStickers(this, msg, downloadOption);
+
+              // Kode Donasi Tambahan
+              const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/namaakun)";
+              setTimeout(async () => {
+                await this.sendMessage(msg.from, { text: donationMessage }, { quoted: msg });
+              }, 1000); // Delay 1 detik
+
             } else {
               console.log(`[ERROR] sticker command or downloadStickers function not found`);
               return msg.reply("❌ Command sticker tidak ditemukan atau fungsi download tidak tersedia.");
@@ -473,7 +494,7 @@ module.exports = {
             text: `🎉 *BENAR!* 🎉\n\n` +
                   `Jawaban: *${gameSession.answer}*\n` +
                   `Level: ${gameSession.level}\n` +
-                  `Poin: *+${gameSession.points}*\n\n` +
+                  `Poin: *+${gamePoints}*\n\n` +
                   `🏆 Selamat @${msg.sender.split('@')[0]}!\n` +
                   `💫 Total poin kamu: *${gameSession.sessionScores[msg.sender]}*\n\n` +
                   `🔄 *Bersiap untuk soal berikutnya...*`, 
@@ -527,6 +548,21 @@ module.exports = {
         let extra = { bot: this, usedPrefix, participants, groupMetadata, args, command: commandName };
         try {
           await command.execute.call(this, msg, extra);
+
+          // --- Tambahkan kode baru di sini untuk pesan donasi ---
+          const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/daylight021)";
+          
+          // Cek apakah perintah yang dijalankan bukan game atau menu
+          const isGameOrMenuCommand = ['menu', 'family100', 'tebakkata', 'uno', 'werewolf'].includes(commandName);
+          
+          // Kirim pesan donasi hanya jika perintah berhasil dan bukan perintah game atau menu
+          if (!isGameOrMenuCommand) {
+            setTimeout(async () => {
+              await this.sendMessage(msg.from, { text: donationMessage }, { quoted: msg });
+            }, 1000); // Delay 1 detik
+          }
+          // ----------------------------------------------------
+
         } catch (error) {
           console.error(`Error saat menjalankan perintah '${commandName}':`, error);
           msg.reply("Terjadi kesalahan internal saat menjalankan perintah.");
