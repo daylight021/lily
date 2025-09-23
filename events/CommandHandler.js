@@ -117,7 +117,6 @@ async function handleFamily100Answer(msg, bot) {
 
     // Tampilkan jawaban
     statusText += `📋 *Jawaban* (${gameSession.correctAnswers}/${gameSession.totalAnswers}):\n`;
-    gameStatusText += `📋 *Jawaban* (${gameSession.correctAnswers}/${gameSession.totalAnswers}):\n`;
     gameSession.jawaban.forEach((jawaban, index) => {
       if (gameSession.terjawab[index]) {
         statusText += `✅ (${index + 1}) ${jawaban} - @${gameSession.answeredBy[index].split('@')[0]}\n`;
