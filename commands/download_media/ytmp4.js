@@ -85,9 +85,14 @@ async function downloadVideo(msg, bot, url, quality, usedPrefix, command) {
         const videoPath = path.join(TEMP_DIR, `video_${timestamp}.mp4`);
         const audioPath = path.join(TEMP_DIR, `audio_${timestamp}.m4a`);
         const outputPath = path.join(TEMP_DIR, `output_${timestamp}.mp4`);
+        
+        // ✨ THE FIX: Add a 'User-Agent' header to the axios requests
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        };
 
-        const videoStream = (await axios.get(selectedVideo.url, { responseType: 'stream' })).data;
-        const audioStream = (await axios.get(bestAudio.url, { responseType: 'stream' })).data;
+        const videoStream = (await axios.get(selectedVideo.url, { responseType: 'stream', headers: headers })).data; // ADDED HEADERS
+        const audioStream = (await axios.get(bestAudio.url, { responseType: 'stream', headers: headers })).data; // ADDED HEADERS
 
         await Promise.all([
             new Promise(resolve => videoStream.pipe(fs.createWriteStream(videoPath)).on('finish', resolve)),
@@ -208,7 +213,7 @@ module.exports = {
                     `📅 *Published:* ${uploadDate}\n\n` +
                     `📄 *Description:*\n${description}\n\n` +
                     `📥 *Pilih kualitas video untuk download:*`,
-            footer: 'Powered by YouTube Downloader Bot',
+            footer: "Powered by 『∂αуℓιgнт』's Bot",
             buttons: buttons,
             image: { url: thumbnailUrl },
             headerType: 4
