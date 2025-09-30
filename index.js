@@ -1,4 +1,32 @@
 require("dotenv").config();
+
+// Override stdout SEBELUM require library apapun
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+let allowQRCode = false; // Flag untuk mengizinkan QR code
+
+process.stdout.write = (chunk, encoding, callback) => {
+  const str = chunk.toString();
+
+  // Izinkan QR code saat flag aktif
+  if (allowQRCode) {
+    return originalStdoutWrite(chunk, encoding, callback);
+  }
+
+  // Blokir output yang mirip ASCII art dari Baileys
+  // Deteksi pattern: banyak karakter #, █, ▓, ▒, ░ atau line penuh dengan karakter sama
+  const isBaileysArt = (
+    (str.match(/#/g) || []).length > 50 || // Lebih dari 50 karakter #
+    str.includes('▓▓▓') || // Pattern blok berturut
+    /^[█▓▒░\s]+$/m.test(str) // Hanya karakter blok dan spasi
+  );
+  if (isBaileysArt) {
+    if (typeof callback === 'function') callback();
+    return true;
+  }
+
+  return originalStdoutWrite(chunk, encoding, callback);
+};
+
 const {
   default: makeWASocket,
   useMultiFileAuthState,
@@ -17,7 +45,10 @@ const chokidar = require("chokidar");
 const qrcode = require('qrcode-terminal');
 const Collection = require("./lib/CommandCollections");
 
-const store = makeInMemoryStore({ logger: Pino().child({ level: 'silent', stream: 'store' }) });
+// Set logger dengan level fatal untuk meminimalkan output
+const store = makeInMemoryStore({
+  logger: Pino({ level: 'fatal' }).child({ level: 'fatal', stream: 'store' })
+});
 
 // Fungsi utama untuk menjalankan bot
 async function startBot() {
@@ -26,16 +57,18 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("sessions");
 
   const bot = makeWASocket({
-    logger: Pino({ level: "silent" }),
-    printQRInTerminal: false, // Kita akan menangani QR secara manual
+    // Ubah ke level 'fatal' untuk mematikan semua log dari baileys
+    logger: Pino({ level: "fatal" }),
+    printQRInTerminal: false,
     browser: ['My-WhatsApp-Bot', 'Chrome', '1.0.0'],
     auth: {
       creds: state.creds,
-      // Menyimpan kunci sinyal di memori cache untuk kecepatan
-      keys: makeCacheableSignalKeyStore(state.keys, Pino({ level: "silent" }).child({ level: 'silent' })),
+      keys: makeCacheableSignalKeyStore(state.keys, Pino({ level: "fatal" })),
     },
-    // Memberi tahu bot cara mengambil pesan yang tersimpan
-    getMessage: async (key) => store.loadMessage(key.remoteJid, key.id)
+    getMessage: async (key) => store.loadMessage(key.remoteJid, key.id),
+    // Opsi tambahan untuk mematikan print default
+    syncFullHistory: false,
+    markOnlineOnConnect: false,
   });
 
   // Mengikat store ke event bot
@@ -64,7 +97,12 @@ async function startBot() {
     if (qr) {
       console.log('------------------------------------------------');
       console.log('📱 Pindai QR Code di bawah ini:');
+
+      // Aktifkan flag untuk mengizinkan QR code
+      allowQRCode = true;
       qrcode.generate(qr, { small: true });
+      // Matikan flag setelah QR code selesai ditampilkan
+      setTimeout(() => { allowQRCode = false; }, 100);
     }
 
     if (connection === "close") {
