@@ -34,7 +34,7 @@ function sleep(ms) {
 // --- FUNGSI SCRAPING ---
 
 /**
- * [BARU] Fungsi untuk mengunduh media dari satu URL Pinterest.
+ * [YANG DIPERBAIKI] Fungsi untuk mengunduh media dari satu URL Pinterest.
  * @param {string} url - URL pin Pinterest (gambar atau video).
  * @returns {Promise<{type: 'video'|'image', url: string}|null>}
  */
@@ -57,29 +57,38 @@ async function downloadFromPinterestURL(url) {
       timeout: 30000
     });
 
-    // Tunggu sebentar agar konten dinamis (seperti video player) sempat dimuat
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Menunggu selector utama dari gambar atau video muncul
+    await page.waitForSelector('div[data-test-id="pin-closeup-image"] img, video[src]', { timeout: 10000 });
 
     const mediaData = await page.evaluate(() => {
-      // Prioritaskan pencarian elemen video
-      const videoElement = document.querySelector('video[src]');
-      if (videoElement && videoElement.src) {
-        return {
-          type: 'video',
-          url: videoElement.src
-        };
+      try {
+        // Metode BARU: Cari data JSON yang tersembunyi di halaman
+        const jsonDataEl = document.querySelector('script[id="__PWS_INITIAL_STATE__"]');
+        if (jsonDataEl && jsonDataEl.textContent) {
+          const data = JSON.parse(jsonDataEl.textContent);
+          // Cari data pin di dalam struktur JSON yang kompleks
+          const pinData = Object.values(data.resources.PinResource).find(
+            (obj) => obj && obj.data && (obj.data.videos || obj.data.images)
+          );
+
+          if (pinData && pinData.data.videos) {
+            const videoList = pinData.data.videos.video_list;
+            // Pilih kualitas video terbaik (prioritas 720p)
+            const videoUrl = videoList.V_720P?.url || videoList.V_480P?.url;
+            if (videoUrl) {
+              return { type: 'video', url: videoUrl };
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Gagal parsing JSON, mencoba metode fallback.', e);
       }
 
-      // Jika tidak ada video, cari elemen gambar utama
-      // Selector ini menargetkan gambar utama di halaman pin
+      // Metode LAMA (Fallback): Jika JSON gagal, coba cari elemen gambar
       const imageElement = document.querySelector('div[data-test-id="pin-closeup-image"] img');
       if (imageElement && imageElement.src) {
-        // Upgrade ke resolusi tertinggi (originals)
         const highResUrl = imageElement.src.replace(/(\/\d+x[^\/]*\/)/, '/originals/');
-        return {
-          type: 'image',
-          url: highResUrl
-        };
+        return { type: 'image', url: highResUrl };
       }
       return null;
     });
