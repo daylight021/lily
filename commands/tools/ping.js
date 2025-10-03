@@ -2,7 +2,7 @@
 const os = require("os");
 
 module.exports = {
-  name: "menu",
+  name: "ping",
   description: "Menampilkan informasi dan status server bot.",
   execute: async (msg, { args, bot }) => {
     // Menghitung latensi dari waktu pesan dikirim oleh user hingga diproses oleh bot
@@ -42,4 +42,5 @@ module.exports = {
     // Mengirim pesan balasan ke user
     return msg.reply(serverInfoText);
   },
+
 };
