@@ -36,7 +36,7 @@ module.exports = {
 
 *💾 RAM Server:*
 • Digunakan: *${usedMemoryGB} GB / ${totalMemoryGB} GB*
-• Sisa: *${freeMemoryGB} GB*
+• Free: *${freeMemoryGB} GB*
 `;
 
     // Mengirim pesan balasan ke user
@@ -44,3 +44,4 @@ module.exports = {
   },
 
 };
+
