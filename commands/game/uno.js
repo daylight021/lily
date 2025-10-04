@@ -15,13 +15,6 @@ const valueToString = (value) => {
 const colorToString = (color) => color.toLowerCase();
 const cardToFileName = (card) => card.isWild ? `${valueToString(card.value)}.png` : `${colorToString(card.color)}_${valueToString(card.value)}.png`;
 
-// Fungsi untuk tag semua member grup (seperti hidetag)
-function getAllMembers(participants) {
-    return participants
-        .filter((participant) => participant.admin !== "superadmin" && participant.admin !== "admin")
-        .map((participant) => participant.id);
-}
-
 /**
  * Fungsi untuk mengirim kartu pemain ke private message (PM)
  * @param {object} bot Objek bot Baileys
@@ -281,9 +274,8 @@ module.exports = {
     alias: ['uno'],
     description: 'Mainkan game UNO dengan teman-temanmu!',
     category: 'game',
-    execute: async (msg, { bot, args, usedPrefix, participants }) => {
+    execute: async (msg, { bot, args, usedPrefix }) => {
         const { from, sender, body } = msg;
-        const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/daylight021)";
         const senderName = msg.pushName || msg.senderName || sender.split('@')[0] || 'Pemain';
         bot.uno = bot.uno || {};
         const command = args[0]?.toLowerCase();
@@ -408,8 +400,6 @@ module.exports = {
                         }
                     }
 
-                    await bot.sendMessage(from, { text: groupMessage + donationMessage });
-
                     delete bot.uno[fromGroup];
                     return;
                 }
@@ -462,10 +452,8 @@ module.exports = {
                 bot.uno[from] = new Game(from, sender);
                 game = bot.uno[from];
                 game.addPlayer({ id: sender, name: senderName });
-                const allMembers = getAllMembers(participants);
-                const lobby_msg = `✅ Lobi UNO berhasil dibuat oleh ${senderName}!\n\nPemain lain bisa bergabung dengan mengetik \`.uno join\`.`;  
-                msg.reply(lobby_msg);
-                await bot.sendMessage(from, { text: lobby_msg, mentions: allMembers });
+                const lobby_msg = `✅ Lobi UNO berhasil dibuat oleh ${senderName}!\n\nPemain lain bisa bergabung dengan mengetik \`.uno join\`.`;
+                await bot.sendMessage(from, { text: lobby_msg });
                 break;
 
             case 'join': {
@@ -588,8 +576,6 @@ module.exports = {
 
                 delete bot.uno[from];
                 msg.reply('🛑 Sesi UNO telah dihentikan.');
-
-                await bot.sendMessage(from, { text: groupMessage + donationMessage });
 
                 break;
             }
