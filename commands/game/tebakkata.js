@@ -21,13 +21,6 @@ function generateHangman(word) {
     return letters.join(' ');
 }
 
-// Fungsi untuk tag semua member grup (seperti hidetag)
-function getAllMembers(participants) {
-    return participants
-        .filter((participant) => participant.admin !== "superadmin" && participant.admin !== "admin")
-        .map((participant) => participant.id);
-}
-
 // Fungsi untuk mengirim soal
 async function sendQuestion(bot, groupId) {
     const gameSession = bot.game.tebakkata[groupId];
@@ -130,19 +123,13 @@ async function endGame(bot, groupId, reason = 'manual') {
         globalLeaderboardText += '_Leaderboard global masih kosong._'
     }
 
-    const mentions = sortedSession.map(([userId]) => userId).concat(sortedGlobal.map(([userId]) => userId));
     await bot.sendMessage(groupId, { 
         text: `🎮 ${endGameText}` +
               `📊 Total soal dimainkan: ${gameSession.questionCount || 0}\n\n` +
               `${sessionLeaderboardText}${globalLeaderboardText}\n\n` +
               `Terima kasih telah bermain! 🎉\n` +
               `Mulai lagi dengan *.tebakkata start*`,
-        mentions: [...new Set(mentions)]
     });
-
-    const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/daylight021)";
-
-    await bot.sendMessage(from, { text: message + donationMessage });
     
     delete bot.game.tebakkata[groupId];
 }
@@ -155,7 +142,7 @@ module.exports = {
     group: true, // Hanya bisa dimainkan di grup
     async execute(msg, extra) {
         const { from } = msg;
-        const { bot, args, participants } = extra;
+        const { bot, args } = extra;
         const subCommand = args[0]?.toLowerCase();
 
         // Inisialisasi game object jika belum ada
@@ -188,7 +175,6 @@ module.exports = {
             };
 
             // Tag semua member grup dengan pesan ajakan
-            const allMembers = getAllMembers(participants);
             const challengeMessages = [
                 `🎮 *GAME TEBAK KATA DIMULAI!* 🧩\n\n` +
                 `🔥 Ayo buktikan siapa yang paling jago tebak kata!\n` +
@@ -216,7 +202,7 @@ module.exports = {
             
             await bot.sendMessage(from, { 
                 text: randomMessage,
-                mentions: allMembers
+            
             });
             
             // Delay 3 detik sebelum soal pertama untuk memberi waktu member melihat
@@ -235,15 +221,13 @@ module.exports = {
             }
 
             let text = '🏆 *LEADERBOARD GLOBAL TEBAK KATA*\n\n';
-            const mentions = [];
             sortedGlobal.forEach(([userId, score], index) => {
                  const medal = index === 0 ? '👑' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
                  text += `${medal} ${index + 1}. @${userId.split('@')[0]} - *${score}* Poin\n`;
-                 mentions.push(userId);
             });
             
             text += '\n💡 *Tip:* Semakin sulit level soal, semakin besar poin yang didapat!';
-            await bot.sendMessage(from, { text, mentions });
+            await bot.sendMessage(from, { text });
 
         } else if (subCommand === 'status') {
             const gameSession = bot.game.tebakkata?.[from];
@@ -271,8 +255,7 @@ module.exports = {
             
             statusText += `\n⏰ Game akan berakhir otomatis jika tidak ada yang menjawab dalam 60 detik.`;
 
-            const mentions = sessionScores.map(([userId]) => userId);
-            await bot.sendMessage(from, { text: statusText, mentions });
+            await bot.sendMessage(from, { text: statusText });
 
         } else {
             const helpText = `🎯 *BANTUAN GAME TEBAK KATA* 🧩\n\n` +
