@@ -9,13 +9,6 @@ const allSoal = JSON.parse(fs.readFileSync(soalPath));
 const threshold = 0.72; // Nilai similarity untuk jawaban yang hampir benar
 const winScore = 1000; // Poin per jawaban benar
 
-// Fungsi untuk tag semua member grup (seperti hidetag)
-function getAllMembers(participants) {
-    return participants
-        .filter((participant) => participant.admin !== "superadmin" && participant.admin !== "admin")
-        .map((participant) => participant.id);
-}
-
 // Fungsi untuk mengirim soal baru
 async function sendQuestion(bot, groupId) {
     const gameSession = bot.game.family100[groupId];
@@ -103,7 +96,6 @@ async function checkAnswer(bot, msg) {
     if (gameSession.terjawab[answerIndex]) {
         await bot.sendMessage(groupId, {
             text: `❌ Jawaban "${gameSession.jawaban[answerIndex]}" sudah dijawab oleh @${gameSession.answeredBy[answerIndex].split('@')[0]}!`,
-            mentions: [gameSession.answeredBy[answerIndex]]
         });
         return true;
     }
@@ -170,10 +162,8 @@ async function showCurrentStatus(bot, groupId, isComplete) {
         statusText += `⏰ Game berlanjut... Cari jawaban yang tersisa!\n`;
     }
 
-    const mentions = gameSession.answeredBy.filter(Boolean);
     await bot.sendMessage(groupId, { 
         text: statusText, 
-        mentions: [...new Set(mentions)]
     });
 }
 
@@ -256,24 +246,13 @@ async function endGame(bot, groupId, reason = 'manual') {
         globalLeaderboardText += '_Leaderboard global masih kosong._';
     }
 
-    const allMentions = [
-        ...sortedSession.map(([userId]) => userId),
-        ...sortedGlobal.map(([userId]) => userId),
-        ...(gameSession.answeredBy || []).filter(Boolean)
-    ];
-
     await bot.sendMessage(groupId, { 
         text: `🎮 ${endGameText}` +
               `📊 Total soal dimainkan: ${gameSession.questionCount || 0}\n\n` +
               `${sessionLeaderboardText}${globalLeaderboardText}\n\n` +
               `Terima kasih telah bermain! 🎉\n` +
               `Mulai lagi dengan *.family100 start*`,
-        mentions: [...new Set(allMentions)]
     });
-
-    const donationMessage = "Jika anda suka dengan bot ini, kamu bisa mensupport pengembang agar mereka lebih semangat lagi dan juga agar bot tetap online, Berapa pun yang kalian berikan akan sangat berarti bagi kami😊❤️\n\n💰 *Donasi:* [Saweria](https://saweria.co/daylight021)";
-
-    await bot.sendMessage(from, { text: message + donationMessage });
 
     delete bot.game.family100[groupId];
 }
@@ -286,7 +265,7 @@ module.exports = {
     group: true, // Hanya bisa dimainkan di grup
     async execute(msg, extra) {
         const { from } = msg;
-        const { bot, args, participants } = extra;
+        const { bot, args } = extra;
         const subCommand = args[0]?.toLowerCase();
 
         // Inisialisasi game object jika belum ada
@@ -321,7 +300,6 @@ module.exports = {
             };
 
             // Tag semua member grup dengan pesan ajakan
-            const allMembers = getAllMembers(participants);
             const challengeMessages = [
                 `🎯 *GAME FAMILY 100 DIMULAI!* 🎯\n\n` +
                 `🔥 Siapa yang jago survei dan tebak jawaban populer?\n` +
@@ -349,7 +327,6 @@ module.exports = {
             
             await bot.sendMessage(from, { 
                 text: randomMessage,
-                mentions: allMembers
             });
             
             // Delay 3 detik sebelum soal pertama
@@ -368,15 +345,13 @@ module.exports = {
             }
 
             let text = '🏆 *LEADERBOARD GLOBAL FAMILY 100*\n\n';
-            const mentions = [];
             sortedGlobal.forEach(([userId, score], index) => {
                 const medal = index === 0 ? '👑' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
                 text += `${medal} ${index + 1}. @${userId.split('@')[0]} - *${score}* Poin\n`;
-                mentions.push(userId);
             });
             
             text += `\n💡 *Tip:* Setiap jawaban benar memberikan ${winScore} poin!`;
-            await bot.sendMessage(from, { text, mentions });
+            await bot.sendMessage(from, { text });
 
         } else if (subCommand === 'status') {
             const gameSession = bot.game.family100?.[from];
