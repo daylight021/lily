@@ -1,14 +1,34 @@
-const ytdl = require('@distube/ytdl-core');
+const YTDlpWrap = require('yt-dlp-wrap').default;
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 
 const TEMP_DIR = path.join(__dirname, '../../temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 // Global session storage untuk menyimpan URL terakhir setiap user
 global.ytSessions = global.ytSessions || {};
+
+// Inisialisasi yt-dlp dengan auto-download binary
+const ytDlpPath = path.join(__dirname, '../../bin/yt-dlp');
+const ytDlp = new YTDlpWrap(ytDlpPath);
+
+// Auto-download binary jika belum ada
+(async () => {
+    try {
+        const binDir = path.join(__dirname, '../../bin');
+        if (!fs.existsSync(binDir)) fs.mkdirSync(binDir, { recursive: true });
+        
+        if (!fs.existsSync(ytDlpPath)) {
+            console.log('Downloading yt-dlp binary...');
+            await YTDlpWrap.downloadFromGithub(ytDlpPath);
+            fs.chmodSync(ytDlpPath, 0o755); // Make executable
+            console.log('yt-dlp binary downloaded successfully!');
+        }
+    } catch (err) {
+        console.error('Failed to download yt-dlp:', err);
+    }
+})();
 
 // Helper function untuk format durasi
 function formatDuration(seconds) {
@@ -38,14 +58,27 @@ function formatNumber(num) {
 }
 
 async function getYtInfo(url) {
-    const info = await ytdl.getInfo(url);
-    const videoFormats = ytdl.filterFormats(info.formats, 'videoonly').filter(f => f.container === 'mp4');
-    const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
+    try {
+        // Mengambil metadata video
+        const metadata = await ytDlp.getVideoInfo(url);
+        
+        // Filter format video dan audio
+        const videoFormats = metadata.formats
+            .filter(f => f.vcodec !== 'none' && f.acodec === 'none' && f.ext === 'mp4')
+            .sort((a, b) => (b.height || 0) - (a.height || 0));
+        
+        const audioFormats = metadata.formats
+            .filter(f => f.acodec !== 'none' && f.vcodec === 'none')
+            .sort((a, b) => (b.abr || 0) - (a.abr || 0));
 
-    if (videoFormats.length === 0 || audioFormats.length === 0) {
-        throw new Error("Tidak ada format video/audio terpisah yang ditemukan.");
+        if (videoFormats.length === 0 || audioFormats.length === 0) {
+            throw new Error("Tidak ada format video/audio terpisah yang ditemukan.");
+        }
+
+        return { metadata, videoFormats, audioFormats };
+    } catch (err) {
+        throw new Error(`Gagal mengambil info video: ${err.message}`);
     }
-    return { info, videoFormats, audioFormats };
 }
 
 function mergeVideoAudio(videoPath, audioPath, outputPath) {
@@ -64,39 +97,58 @@ function mergeVideoAudio(videoPath, audioPath, outputPath) {
 async function downloadVideo(msg, bot, url, quality, usedPrefix, command) {
     try {
         await msg.react("⏳");
-        const { info, videoFormats, audioFormats } = await getYtInfo(url);
-        const videoTitle = info.videoDetails.title;
+        const { metadata, videoFormats, audioFormats } = await getYtInfo(url);
+        const videoTitle = metadata.title;
 
-        const selectedVideo = videoFormats.find(f => f.qualityLabel === quality);
+        // Cari format video berdasarkan resolusi yang dipilih
+        const heightMap = {
+            '2160p': 2160,
+            '1440p': 1440,
+            '1080p': 1080,
+            '720p': 720,
+            '480p': 480,
+            '360p': 360,
+            '240p': 240,
+            '144p': 144
+        };
+
+        const targetHeight = heightMap[quality];
+        const selectedVideo = videoFormats.find(f => f.height === targetHeight);
+        
         if (!selectedVideo) {
             await msg.react("⚠️");
             return msg.reply(`❌ Kualitas "${quality}" tidak ditemukan atau tidak valid.`);
         }
 
-        const bestAudio = audioFormats.sort((a, b) => b.audioBitrate - a.audioBitrate)[0];
+        const bestAudio = audioFormats[0]; // Audio terbaik sudah di-sort
 
         await msg.reply(`✅ Memulai download video...\n\n` +
                       `🎬 *${videoTitle}*\n` +
                       `📊 *Kualitas:* ${quality}\n` +
-                      `⏱️ *Durasi:* ${formatDuration(parseInt(info.videoDetails.lengthSeconds || 0))}\n\n` +
+                      `⏱️ *Durasi:* ${formatDuration(parseInt(metadata.duration || 0))}\n\n` +
                       `⏳ Sedang mengunduh dan memproses... Ini mungkin memakan waktu. (Bisa sampai 3 - 5 menit atau bahkan lebih) Mohon tunggu😊`);
 
         const timestamp = Date.now();
         const videoPath = path.join(TEMP_DIR, `video_${timestamp}.mp4`);
         const audioPath = path.join(TEMP_DIR, `audio_${timestamp}.m4a`);
         const outputPath = path.join(TEMP_DIR, `output_${timestamp}.mp4`);
-        
-        // ✨ THE FIX: Add a 'User-Agent' header to the axios requests
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        };
 
-        const videoStream = (await axios.get(selectedVideo.url, { responseType: 'stream', headers: headers })).data; // ADDED HEADERS
-        const audioStream = (await axios.get(bestAudio.url, { responseType: 'stream', headers: headers })).data; // ADDED HEADERS
-
+        // Download video dan audio secara parallel menggunakan yt-dlp
         await Promise.all([
-            new Promise(resolve => videoStream.pipe(fs.createWriteStream(videoPath)).on('finish', resolve)),
-            new Promise(resolve => audioStream.pipe(fs.createWriteStream(audioPath)).on('finish', resolve))
+            ytDlp.execPromise([
+                url,
+                '-f', selectedVideo.format_id,
+                '-o', videoPath,
+                '--no-warnings',
+                '--quiet'
+            ]),
+            ytDlp.execPromise([
+                url,
+                '-f', bestAudio.format_id,
+                '-o', audioPath,
+                '--no-warnings',
+                '--quiet'
+            ])
         ]);
 
         await msg.reply("Menggabungkan video dan audio dengan FFmpeg...");
@@ -107,10 +159,10 @@ async function downloadVideo(msg, bot, url, quality, usedPrefix, command) {
             mimetype: 'video/mp4',
             caption: `✅ *Download berhasil!*\n\n` +
                     `🎬 *${videoTitle}*\n` +
-                    `📺 *Channel:* ${info.videoDetails.author?.name || 'N/A'}\n` +
+                    `📺 *Channel:* ${metadata.uploader || metadata.channel || 'N/A'}\n` +
                     `📊 *Kualitas:* ${quality}\n` +
                     `📁 *Ukuran File:* ${(fs.statSync(outputPath).size / (1024 * 1024)).toFixed(2)} MB\n` +
-                    `⏱️ *Durasi:* ${formatDuration(parseInt(info.videoDetails.lengthSeconds || 0))}\n\n` +
+                    `⏱️ *Durasi:* ${formatDuration(parseInt(metadata.duration || 0))}\n\n` +
                     `🔗 *Link:* ${url}`
         }, { quoted: msg });
 
@@ -141,21 +193,20 @@ module.exports = {
     const input = args[0];
     const quality = args[1];
 
-    // Check jika ini adalah response dari button (format: "Download 1080p", "Download 720p", etc.)
+    // Check jika ini adalah response dari button
     if (input && input.startsWith("Download ") && !quality) {
         const buttonQuality = input.replace("Download ", "");
         const sessionData = global.ytSessions && global.ytSessions[msg.sender];
         
         if (sessionData && sessionData.url) {
-            // Ambil URL dari session dan proses download
             return await downloadVideo(msg, bot, sessionData.url, buttonQuality, usedPrefix, command);
         } else {
             return msg.reply("❌ Session expired. Silakan kirim ulang URL YouTube.");
         }
     }
 
-    // Validasi URL normal
-    if (!input || !ytdl.validateURL(input)) {
+    // Validasi URL normal (simple check)
+    if (!input || !input.includes('youtube.com') && !input.includes('youtu.be')) {
       return msg.reply("❌ Masukkan URL YouTube yang valid.");
     }
 
@@ -163,32 +214,49 @@ module.exports = {
 
     try {
         await msg.react("⏳");
-        const { info, videoFormats } = await getYtInfo(url);
-        const videoTitle = info.videoDetails.title;
-        const thumbnailUrl = info.videoDetails.thumbnails.slice(-1)[0].url;
+        const { metadata, videoFormats } = await getYtInfo(url);
+        const videoTitle = metadata.title;
+        const thumbnailUrl = metadata.thumbnail;
 
         // Jika quality sudah dipilih langsung
         if (quality) {
             return await downloadVideo(msg, bot, url, quality, usedPrefix, command);
         }
 
-        // Tampilkan pilihan kualitas
-        const uniqueQualities = [...new Set(videoFormats.map(f => f.qualityLabel))].filter(Boolean);
+        // Ambil kualitas unik berdasarkan height
+        const qualityMap = {
+            2160: '2160p',
+            1440: '1440p',
+            1080: '1080p',
+            720: '720p',
+            480: '480p',
+            360: '360p',
+            240: '240p',
+            144: '144p'
+        };
+
+        const uniqueQualities = [...new Set(
+            videoFormats
+                .filter(f => f.height && qualityMap[f.height])
+                .map(f => qualityMap[f.height])
+        )];
+
         if (uniqueQualities.length === 0) {
             return msg.reply("Tidak ada pilihan kualitas video yang tersedia untuk link ini.");
         }
 
         // Ambil informasi video detail
-        const videoDetails = info.videoDetails;
-        const viewCount = formatNumber(videoDetails.viewCount);
-        const likes = formatNumber(videoDetails.likes);
-        const duration = videoDetails.lengthSeconds ? formatDuration(parseInt(videoDetails.lengthSeconds)) : 'N/A';
-        const uploadDate = videoDetails.publishDate || 'N/A';
-        const channel = videoDetails.author?.name || videoDetails.ownerChannelName || 'N/A';
-        const description = videoDetails.description ? 
-            (videoDetails.description.length > 100 ? 
-                videoDetails.description.substring(0, 100) + '...' : 
-                videoDetails.description) : 'N/A';
+        const viewCount = formatNumber(metadata.view_count);
+        const likes = formatNumber(metadata.like_count);
+        const duration = metadata.duration ? formatDuration(parseInt(metadata.duration)) : 'N/A';
+        const uploadDate = metadata.upload_date ? 
+            `${metadata.upload_date.substring(0, 4)}-${metadata.upload_date.substring(4, 6)}-${metadata.upload_date.substring(6, 8)}` : 
+            'N/A';
+        const channel = metadata.uploader || metadata.channel || 'N/A';
+        const description = metadata.description ? 
+            (metadata.description.length > 100 ? 
+                metadata.description.substring(0, 100) + '...' : 
+                metadata.description) : 'N/A';
         
         // Simpan URL di session untuk user ini
         if (!global.ytSessions) global.ytSessions = {};
@@ -212,7 +280,7 @@ module.exports = {
                     `⏱️ *Duration:* ${duration}\n` +
                     `📅 *Published:* ${uploadDate}\n\n` +
                     `📄 *Description:*\n${description}\n\n` +
-                    `📥 *Pilih kualitas video untuk download:*`,
+                    `🔥 *Pilih kualitas video untuk download:*`,
             footer: "Powered by 『∂αуℓιgнт』's Bot",
             buttons: buttons,
             image: { url: thumbnailUrl },
@@ -226,7 +294,7 @@ module.exports = {
             if (global.ytSessions && global.ytSessions[msg.sender] && global.ytSessions[msg.sender].timestamp) {
                 delete global.ytSessions[msg.sender];
             }
-        }, 5 * 60 * 1000); // 5 menit
+        }, 5 * 60 * 1000);
 
         return;
 
