@@ -1,22 +1,45 @@
-const ytdl = require('@distube/ytdl-core');
-const axios = require('axios');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const fs = require('fs');
+const path = require('path');
+
+const execAsync = promisify(exec);
+
+const TEMP_DIR = path.join(__dirname, '../../temp');
+const YT_DLP_PATH = path.join(__dirname, '../../bin/yt-dlp');
+
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 // Global session storage untuk menyimpan URL terakhir setiap user
 global.ytmp3Sessions = global.ytmp3Sessions || {};
 
-// Fungsi ini diadaptasi dari screaper.js
-async function getYtInfo(url) {
-    const info = await ytdl.getInfo(url);
-    const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
-    
-    // Urutkan berdasarkan bitrate untuk mendapatkan kualitas terbaik
-    audioFormats.sort((a, b) => b.audioBitrate - a.audioBitrate);
-
-    if (audioFormats.length === 0) {
-        throw new Error("Tidak ada format audio yang ditemukan.");
+// Get Python command (prioritize Python 3.11+)
+function getPythonCommand() {
+    const pythonVersions = ['python3.11', 'python3.10', 'python3.9', 'python3'];
+    for (const py of pythonVersions) {
+        try {
+            const { stdout } = require('child_process').execSync(`which ${py}`, { encoding: 'utf8' });
+            if (stdout.trim()) return py;
+        } catch (e) {
+            continue;
+        }
     }
-    
-    return { info, audioFormats };
+    return 'python3'; // fallback
+}
+
+const PYTHON_CMD = getPythonCommand();
+
+// Check if yt-dlp binary exists
+function checkYtDlpBinary() {
+    if (!fs.existsSync(YT_DLP_PATH)) {
+        throw new Error(
+            `yt-dlp binary not found!\n\n` +
+            `Please run:\n` +
+            `cd ${path.dirname(YT_DLP_PATH)}\n` +
+            `wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -O yt-dlp\n` +
+            `chmod +x yt-dlp`
+        );
+    }
 }
 
 // Helper function untuk format durasi
@@ -46,54 +69,101 @@ function formatNumber(num) {
     return number.toLocaleString('id-ID');
 }
 
+async function getYtInfo(url) {
+    try {
+        checkYtDlpBinary();
+        
+        // Detect if yt-dlp is a standalone binary or Python script
+        let command;
+        try {
+            const { stdout: fileType } = await execAsync(`file "${YT_DLP_PATH}"`);
+            if (fileType.includes('ELF') || fileType.includes('executable')) {
+                // Standalone binary - run directly
+                command = `"${YT_DLP_PATH}" --dump-json --no-warnings "${url}"`;
+            } else {
+                // Python script - use Python interpreter
+                command = `${PYTHON_CMD} "${YT_DLP_PATH}" --dump-json --no-warnings "${url}"`;
+            }
+        } catch (e) {
+            // Fallback: try direct execution first
+            command = `"${YT_DLP_PATH}" --dump-json --no-warnings "${url}"`;
+        }
+        
+        const { stdout } = await execAsync(command);
+        const metadata = JSON.parse(stdout);
+        
+        const audioFormats = metadata.formats
+            .filter(f => f.acodec !== 'none' && f.vcodec === 'none')
+            .sort((a, b) => (b.abr || 0) - (a.abr || 0));
+
+        if (audioFormats.length === 0) {
+            throw new Error("Tidak ada format audio yang ditemukan.");
+        }
+
+        return { metadata, audioFormats };
+    } catch (err) {
+        throw new Error(`Gagal mengambil info video: ${err.message}`);
+    }
+}
+
 async function downloadAudio(msg, bot, url, bitrate, usedPrefix, command) {
+    let audioPath;
+    
     try {
         await msg.react("⏳");
         console.log(`[YTMP3] Starting download for URL: ${url} with bitrate: ${bitrate}`);
         
-        const { info, audioFormats } = await getYtInfo(url);
-        const videoDetails = info.videoDetails;
-        const videoTitle = videoDetails.title;
+        const { metadata, audioFormats } = await getYtInfo(url);
+        const videoTitle = metadata.title;
 
         // Pilih format audio berdasarkan bitrate yang diminta
         let selectedAudio;
         if (bitrate) {
             const requestedBitrate = parseInt(bitrate.replace('kbps', ''));
-            selectedAudio = audioFormats.find(f => f.audioBitrate >= requestedBitrate) || audioFormats[0];
-            console.log(`[YTMP3] Requested bitrate: ${requestedBitrate}, Selected: ${selectedAudio.audioBitrate}kbps`);
+            selectedAudio = audioFormats.find(f => (f.abr || 0) >= requestedBitrate) || audioFormats[0];
+            console.log(`[YTMP3] Requested bitrate: ${requestedBitrate}, Selected: ${selectedAudio.abr || 'N/A'}kbps`);
         } else {
             selectedAudio = audioFormats[0]; // Kualitas terbaik
-            console.log(`[YTMP3] Using best quality: ${selectedAudio.audioBitrate}kbps`);
+            console.log(`[YTMP3] Using best quality: ${selectedAudio.abr || 'N/A'}kbps`);
         }
 
-        const viewCount = formatNumber(videoDetails.viewCount);
-        const likes = formatNumber(videoDetails.likes);
-        const duration = videoDetails.lengthSeconds ? formatDuration(parseInt(videoDetails.lengthSeconds)) : 'N/A';
-        const uploadDate = videoDetails.publishDate || 'N/A';
-        const channel = videoDetails.author?.name || videoDetails.ownerChannelName || 'N/A';
+        const viewCount = formatNumber(metadata.view_count);
+        const likes = formatNumber(metadata.like_count);
+        const duration = metadata.duration ? formatDuration(parseInt(metadata.duration)) : 'N/A';
+        const uploadDate = metadata.upload_date ? 
+            `${metadata.upload_date.substring(0, 4)}-${metadata.upload_date.substring(4, 6)}-${metadata.upload_date.substring(6, 8)}` : 
+            'N/A';
+        const channel = metadata.uploader || metadata.channel || 'N/A';
 
         await msg.reply(`🎵 Memulai download audio...\n\n` +
                         `🎬 *${videoTitle}*\n` +
                         `📺 *${channel}*\n` +
-                        `🎵 *Bitrate:* ${selectedAudio.audioBitrate || 'Auto'}kbps\n` +
+                        `🎵 *Bitrate:* ${selectedAudio.abr || 'Auto'}kbps\n` +
                         `⏱️ *Durasi:* ${duration}\n\n` +
                         `⏳ Sedang mengunduh dan memproses... Mohon tunggu.`);
 
-        console.log(`[YTMP3] Downloading from URL: ${selectedAudio.url}`);
-        
-        // Unduh ke buffer untuk stabilitas
-        const response = await axios.get(selectedAudio.url, { 
-            responseType: 'arraybuffer',
-            timeout: 60000, // 60 detik timeout
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
+        const timestamp = Date.now();
+        audioPath = path.join(TEMP_DIR, `audio_${timestamp}.mp3`);
 
-        console.log(`[YTMP3] Download completed, file size: ${(response.data.byteLength / (1024 * 1024)).toFixed(2)} MB`);
+        console.log(`[YTMP3] Downloading audio...`);
+        
+        // Detect execution method
+        let ytdlpCmd;
+        try {
+            const { stdout: fileType } = await execAsync(`file "${YT_DLP_PATH}"`);
+            ytdlpCmd = fileType.includes('ELF') || fileType.includes('executable') ? 
+                `"${YT_DLP_PATH}"` : `${PYTHON_CMD} "${YT_DLP_PATH}"`;
+        } catch (e) {
+            ytdlpCmd = `"${YT_DLP_PATH}"`;
+        }
+        
+        // Download audio menggunakan yt-dlp dengan konversi ke mp3
+        await execAsync(`${ytdlpCmd} -f ${selectedAudio.format_id} -x --audio-format mp3 -o "${audioPath}" --no-warnings "${url}"`);
+
+        console.log(`[YTMP3] Download completed, file size: ${(fs.statSync(audioPath).size / (1024 * 1024)).toFixed(2)} MB`);
 
         await bot.sendMessage(msg.from, { 
-            audio: response.data, 
+            audio: fs.readFileSync(audioPath), 
             mimetype: 'audio/mpeg',
             caption: 
             `🎵 *Download berhasil!*\n\n` +
@@ -101,8 +171,8 @@ async function downloadAudio(msg, bot, url, bitrate, usedPrefix, command) {
             `📺 *Channel:* ${channel}\n` +
             `👀 *Views:* ${viewCount}\n` +
             `👍 *Likes:* ${likes}\n` +
-            `🎵 *Bitrate:* ${selectedAudio.audioBitrate || 'Auto'}kbps\n` +
-            `📁 *Ukuran File:* ${(response.data.byteLength / (1024 * 1024)).toFixed(2)} MB\n` +
+            `🎵 *Bitrate:* ${selectedAudio.abr || 'Auto'}kbps\n` +
+            `📁 *Ukuran File:* ${(fs.statSync(audioPath).size / (1024 * 1024)).toFixed(2)} MB\n` +
             `⏱️ *Durasi:* ${duration}\n` +
             `📅 *Published:* ${uploadDate}\n\n` +
             `🔗 *Link:* ${url}`
@@ -121,6 +191,16 @@ async function downloadAudio(msg, bot, url, bitrate, usedPrefix, command) {
         console.error("Proses unduh ytmp3 gagal:", err);
         await msg.react("⚠️");
         return msg.reply(`❌ Gagal mengunduh audio.\n\n*Alasan:* ${err.message}`);
+    } finally {
+        // Cleanup file
+        try {
+            if (audioPath && fs.existsSync(audioPath)) {
+                fs.unlinkSync(audioPath);
+                console.log(`[YTMP3] Cleaned up temp file: ${audioPath}`);
+            }
+        } catch (cleanupErr) {
+            console.error('[YTMP3] Cleanup error:', cleanupErr);
+        }
     }
 }
 
@@ -146,7 +226,6 @@ module.exports = {
         
         if (sessionData && sessionData.url) {
             console.log(`[YTMP3] Found session data for ${msg.sender}: ${sessionData.url}`);
-            // Ambil URL dari session dan proses download
             return await downloadAudio(msg, bot, sessionData.url, buttonBitrate, usedPrefix, command);
         } else {
             console.log(`[YTMP3] No session data found for ${msg.sender}`);
@@ -155,8 +234,8 @@ module.exports = {
         }
     }
 
-    // Validasi URL normal
-    if (!input || !ytdl.validateURL(input)) {
+    // Validasi URL normal (simple check)
+    if (!input || !input.includes('youtube.com') && !input.includes('youtu.be')) {
       console.log(`[YTMP3] Invalid URL provided: "${input}"`);
       return msg.reply("❌ Masukkan URL YouTube yang valid.\n\nContoh: `.ytmp3 https://youtu.be/dQw4w9WgXcQ`");
     }
@@ -166,10 +245,9 @@ module.exports = {
 
     try {
         await msg.react("⏳");
-        const { info, audioFormats } = await getYtInfo(url);
-        const videoDetails = info.videoDetails;
-        const videoTitle = videoDetails.title;
-        const thumbnailUrl = videoDetails.thumbnails.slice(-1)[0].url;
+        const { metadata, audioFormats } = await getYtInfo(url);
+        const videoTitle = metadata.title;
+        const thumbnailUrl = metadata.thumbnail;
 
         console.log(`[YTMP3] Got video info: "${videoTitle}"`);
         console.log(`[YTMP3] Available audio formats: ${audioFormats.length}`);
@@ -181,7 +259,7 @@ module.exports = {
         }
 
         // Tampilkan pilihan bitrate
-        const uniqueBitrates = [...new Set(audioFormats.map(f => f.audioBitrate))].filter(Boolean).sort((a, b) => b - a);
+        const uniqueBitrates = [...new Set(audioFormats.map(f => f.abr).filter(Boolean))].sort((a, b) => b - a);
         console.log(`[YTMP3] Available bitrates:`, uniqueBitrates);
         
         if (uniqueBitrates.length === 0) {
@@ -189,15 +267,17 @@ module.exports = {
         }
 
         // Ambil informasi video detail
-        const viewCount = formatNumber(videoDetails.viewCount);
-        const likes = formatNumber(videoDetails.likes);
-        const duration = videoDetails.lengthSeconds ? formatDuration(parseInt(videoDetails.lengthSeconds)) : 'N/A';
-        const uploadDate = videoDetails.publishDate || 'N/A';
-        const channel = videoDetails.author?.name || videoDetails.ownerChannelName || 'N/A';
-        const description = videoDetails.description ? 
-            (videoDetails.description.length > 100 ? 
-                videoDetails.description.substring(0, 100) + '...' : 
-                videoDetails.description) : 'N/A';
+        const viewCount = formatNumber(metadata.view_count);
+        const likes = formatNumber(metadata.like_count);
+        const duration = metadata.duration ? formatDuration(parseInt(metadata.duration)) : 'N/A';
+        const uploadDate = metadata.upload_date ? 
+            `${metadata.upload_date.substring(0, 4)}-${metadata.upload_date.substring(4, 6)}-${metadata.upload_date.substring(6, 8)}` : 
+            'N/A';
+        const channel = metadata.uploader || metadata.channel || 'N/A';
+        const description = metadata.description ? 
+            (metadata.description.length > 100 ? 
+                metadata.description.substring(0, 100) + '...' : 
+                metadata.description) : 'N/A';
 
         // Simpan URL di session untuk user ini
         if (!global.ytmp3Sessions) global.ytmp3Sessions = {};
@@ -208,10 +288,10 @@ module.exports = {
 
         console.log(`[YTMP3] Session created for ${msg.sender} with URL: ${url}`);
 
-        // Buat button dengan format yang mudah dideteksi
+        // Buat button dengan format yang mudah dideteksi (maksimal 3 opsi)
         const buttons = uniqueBitrates.slice(0, 3).map(bitrate => ({
             buttonId: `yt_audio_${bitrate}kbps`,
-            buttonText: { displayText: `Download Audio ${bitrate}kbps` },
+            buttonText: { displayText: `Download Audio ${Math.round(bitrate)}kbps` },
             type: 1
         }));
 
@@ -226,7 +306,7 @@ module.exports = {
                     `📅 *Published:* ${uploadDate}\n\n` +
                     `📄 *Description:*\n${description}\n\n` +
                     `🎵 *Pilih kualitas audio untuk download:*`,
-            footer: 'Powered by YouTube Audio Downloader Bot',
+            footer: "Powered by 『∂αуℓιgнт』's Bot",
             buttons: buttons,
             image: { url: thumbnailUrl },
             headerType: 4
