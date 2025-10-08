@@ -71,12 +71,56 @@ async function startBot() {
   bot.store = store;
 
   const dbPath = path.join(__dirname, 'database.json');
+
+  // Pastikan file database exist
+  if (!fs.existsSync(dbPath)) {
+    console.log('[DATABASE] File database tidak ditemukan, membuat baru...');
+    fs.writeFileSync(dbPath, JSON.stringify({ users: {}, groups: {} }, null, 2));
+  }
+
+  // Inisialisasi dengan error handling
   bot.db = new Low(new JSONFile(dbPath));
-  await bot.db.read();
-  bot.db.data = bot.db.data || { users: {}, groups: {} };
-  setInterval(() => {
-    bot.db.write().catch(console.error);
-  }, 30 * 1000);
+
+  try {
+    await bot.db.read();
+    // Jika data kosong atau corrupt, reset ke struktur default
+    if (!bot.db.data || typeof bot.db.data !== 'object') {
+      console.log('[DATABASE] Data tidak valid, mereset...');
+      bot.db.data = { users: {}, groups: {} };
+      await bot.db.write();
+    }
+  } catch (error) {
+    console.error('[DATABASE] Error saat membaca database:', error);
+    bot.db.data = { users: {}, groups: {} };
+    await bot.db.write();
+  }
+
+  console.log('[DATABASE] Database berhasil dimuat!');
+
+  // Auto-save dengan debouncing
+  let writeTimeout = null;
+  const safeWrite = async () => {
+    if (writeTimeout) clearTimeout(writeTimeout);
+
+    writeTimeout = setTimeout(async () => {
+      try {
+        await bot.db.write();
+      } catch (error) {
+        console.error('[DATABASE] Error saat auto-save:', error);
+        // Jika error ENOENT, coba buat ulang file
+        if (error.code === 'ENOENT') {
+          try {
+            fs.writeFileSync(dbPath, JSON.stringify(bot.db.data, null, 2));
+            console.log('[DATABASE] File database berhasil dibuat ulang');
+          } catch (writeError) {
+            console.error('[DATABASE] Gagal membuat file:', writeError);
+          }
+        }
+      }
+    }, 1000); // Tunggu 1 detik sebelum write
+  };
+
+  setInterval(safeWrite, 30 * 1000);
 
   bot.commands = new Collection();
   loadCommands("commands", bot);
@@ -106,7 +150,7 @@ async function startBot() {
       console.log(`✅ Koneksi berhasil tersambung sebagai ${bot.user.name || 'Bot'}`);
 
       const PORT = process.env.PORT || 8421;
-      
+
       const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('Bot WhatsApp Aktif!\n');
